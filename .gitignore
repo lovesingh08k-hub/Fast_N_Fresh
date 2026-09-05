@@ -1,0 +1,29 @@
+﻿# Environment / Secrets
+.env
+.env.*
+!.env.example
+
+# Android signing / local config
+**/key.properties
+**/local.properties
+**/*.jks
+**/*.keystore
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Build files
+**/build/
+**/.gradle/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+# Node.js dependencies
+**/node_modules/
