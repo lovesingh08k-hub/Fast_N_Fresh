@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/network/api_config.dart';
 import '../../core/theme/app_colors.dart';
@@ -44,7 +45,7 @@ class PosScreen extends StatefulWidget {
   State<PosScreen> createState() => _PosScreenState();
 }
 
-class _PosScreenState extends State<PosScreen> {
+class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   String? _selectedCategoryId;
 
   final TextEditingController _searchController =
@@ -66,9 +67,27 @@ class _PosScreenState extends State<PosScreen> {
     return 'takeaway';
   }
 
+  Future<void> _screenAwakeOperation = Future<void>.value();
+
+  void _setScreenAwake(bool enabled) {
+    // Serialize platform calls so rapid lifecycle/navigation transitions
+    // cannot leave the final wakelock state different from the latest request.
+    _screenAwakeOperation = _screenAwakeOperation
+        .catchError((_) {})
+        .then((_) async {
+      if (enabled) {
+        await WakelockPlus.enable();
+      } else {
+        await WakelockPlus.disable();
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _setScreenAwake(true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -118,8 +137,25 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _setScreenAwake(false);
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _setScreenAwake(true);
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _setScreenAwake(false);
+        break;
+    }
   }
 
   List<Product> _filteredProducts(
