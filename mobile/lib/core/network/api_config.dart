@@ -7,9 +7,8 @@
 ///   flutter build apk --release \
 ///     --dart-define=API_BASE_URL=https://YOUR-RENDER-URL.onrender.com/api
 ///
-/// Example:
-///   flutter build apk --release \
-///     --dart-define=API_BASE_URL=https://fast-n-fresh-api.onrender.com/api
+/// Current Fast N Fresh production backend:
+///   https://fast-n-fresh-slh9.onrender.com/api
 ///
 /// Android Emulator + local backend:
 ///   http://10.0.2.2:5000/api
@@ -22,16 +21,16 @@ class ApiConfig {
 
   /// Backend API URL.
   ///
-  /// IMPORTANT:
   /// The production APK should always be built with:
   ///
   /// --dart-define=API_BASE_URL=https://YOUR-RENDER-URL.onrender.com/api
   ///
-  /// The default is the verified production Render API so a release build
-  /// remains usable even when the build command omits --dart-define.
+  /// The default points to the current Fast N Fresh Render Backend,
+  /// so the release build remains usable even when the build command
+  /// omits --dart-define.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://fast-n-fresh-api.onrender.com/api',
+    defaultValue: 'https://fast-n-fresh-slh9.onrender.com/api',
   );
 
   /// Connection timeout.
@@ -40,7 +39,9 @@ class ApiConfig {
   /// Request upload timeout.
   static const Duration sendTimeout = Duration(seconds: 20);
 
-  /// Server response timeout. Long enough for a Render cold start.
+  /// Server response timeout.
+  ///
+  /// Long enough to handle a Render cold start.
   static const Duration receiveTimeout = Duration(seconds: 45);
 
   /// Returns the API root without the trailing `/api`.
