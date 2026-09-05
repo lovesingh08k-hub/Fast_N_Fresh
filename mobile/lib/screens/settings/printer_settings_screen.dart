@@ -46,12 +46,19 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     _widthMm = prefs.getDouble(_prefsWidthKey) ?? 80;
     // Permissions must be granted BEFORE we ask the OS for Bluetooth
-    // adapter/connection state. On Android 12+ (API 31+), reading the
-    // adapter state without BLUETOOTH_CONNECT/BLUETOOTH_SCAN already
-    // granted can throw or silently report "disabled" even when Bluetooth
-    // is actually on — this previously showed a false "Bluetooth is
-    // turned off" message on a fresh install.
-    await _service.requestPermissions();
+    // adapter/connection state. On Android 12+ the service requests only
+    // Nearby Devices (SCAN/CONNECT), avoiding false denials from legacy
+    // BLUETOOTH/location permissions that are not applicable on API 31+.
+    final granted = await _service.requestPermissions();
+    if (!granted) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Nearby devices / Bluetooth permission is required. Tap Refresh after allowing it in App settings.';
+        _devices = [];
+      });
+      return;
+    }
     await _service.reconnectLastDevice();
     await _refreshDevices();
   }
@@ -65,7 +72,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       final granted = await _service.requestPermissions();
       if (!granted) {
         setState(() {
-          _error = 'Bluetooth permission was not granted. Open app settings and allow Nearby devices / Bluetooth to use the printer.';
+          _error = 'Nearby devices / Bluetooth permission is required. Open App settings and allow Nearby devices / Bluetooth, then tap Refresh.';
           _devices = [];
         });
         return;

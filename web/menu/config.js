@@ -1,6 +1,8 @@
 // Production configuration for the Fast N Fresh customer QR menu.
 //
-// This static menu has no build step, so the API URL is configured here.
+// This static menu is deployed to GitHub Pages, so QR customers do not hit
+// the Render backend just to load the HTML and wait for a cold start.
+// The menu then calls the production API below.
 //
 // IMPORTANT:
 // - Do NOT use localhost in production.
@@ -11,12 +13,8 @@
 // API URL has been verified against the production backend health endpoint
 // (GET https://fast-n-fresh-api.onrender.com/api/health).
 //
-// NOTE: This copy of the customer menu (web/menu) is NOT what production
-// customers currently see. The live QR menu is served by the backend at
-// GET /menu from backend/public/menu (see app.js). This folder was the
-// source for the old, now-disabled fast-n-fresh-web-menu.onrender.com
-// Render Static Site. Kept in sync here to avoid a second stale URL if it
-// is ever redeployed.
+// This folder is the production static customer menu deployed by GitHub
+// Pages. The backend still contains a /menu copy for backward compatibility.
 
 window.FNF_CONFIG = {
   API_BASE_URL: 'https://fast-n-fresh-api.onrender.com/api',

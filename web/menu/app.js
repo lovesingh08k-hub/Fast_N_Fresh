@@ -209,7 +209,7 @@
 
     let response;
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 45000);
 
     try {
       response = await fetch(
@@ -225,7 +225,7 @@
     } catch (error) {
       if (error?.name === 'AbortError') {
         throw new Error(
-          'Cafe server took too long to respond. Please try again.'
+          'Cafe server is waking up. Please wait a moment and try again.'
         );
       }
       throw new Error(

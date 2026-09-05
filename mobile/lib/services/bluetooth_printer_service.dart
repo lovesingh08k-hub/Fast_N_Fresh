@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
@@ -34,18 +36,33 @@ class BluetoothPrinterService extends ChangeNotifier {
   String? get connectedName => _connectedName;
   String? get connectedMac => _connectedMac;
 
-  /// Requests the Bluetooth (and, on older Android, location) permissions
-  /// needed to see and connect to paired devices. Returns true if granted.
+  /// Requests only the Bluetooth permissions that apply to the Android
+  /// version. Android 12+ (API 31+) uses Nearby Devices permissions
+  /// (BLUETOOTH_SCAN/CONNECT); the legacy BLUETOOTH and location permissions
+  /// are capped at API 30 in AndroidManifest.xml and must not be included in
+  /// the modern permission check, otherwise permission_handler can report a
+  /// false denial even when Nearby Devices is already allowed.
   Future<bool> requestPermissions() async {
-    final statuses = await [
-      Permission.bluetooth,
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.location,
-    ].request();
-    // Not every one of these permissions exists on every Android version —
-    // the plugin reports the ones that don't apply as already-granted.
+    if (!Platform.isAndroid) return true;
+
+    final apiLevel = _androidApiLevel;
+    final permissions = apiLevel != null && apiLevel >= 31
+        ? <Permission>[
+            Permission.bluetoothScan,
+            Permission.bluetoothConnect,
+          ]
+        : <Permission>[
+            Permission.bluetooth,
+            Permission.location,
+          ];
+
+    final statuses = await permissions.request();
     return statuses.values.every((s) => s.isGranted || s.isLimited);
+  }
+
+  int? get _androidApiLevel {
+    final match = RegExp(r'API\s*(\d+)', caseSensitive: false).firstMatch(Platform.operatingSystemVersion);
+    return match == null ? null : int.tryParse(match.group(1)!);
   }
 
   Future<bool> isBluetoothEnabled() async {
