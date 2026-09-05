@@ -1,35 +1,110 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Required for all API communication with the Fast N Fresh Cafe backend -->
+
+    <!-- ========================================================= -->
+    <!-- NETWORK                                                    -->
+    <!-- ========================================================= -->
+
+    <!-- Required for communication with the Fast N Fresh backend -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Used to detect connectivity changes for the "No internet connection" state -->
+
+    <!-- Detect network/connectivity changes -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Product photo capture/selection (Item Management) -->
+
+
+    <!-- ========================================================= -->
+    <!-- PRODUCT PHOTOS                                             -->
+    <!-- ========================================================= -->
+
+    <!-- Camera access for taking product photos -->
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Android 13+ photo access -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- New-order alerts (Android 13+ requires this at runtime too) -->
+
+    <!-- Android 12 and below photo access -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+
+    <!-- ========================================================= -->
+    <!-- NOTIFICATIONS                                              -->
+    <!-- ========================================================= -->
+
+    <!-- Android 13+ notification permission -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Bluetooth thermal receipt printer (café POS billing counter printer) -->
-    <!-- Android 11 and below -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
-    <!-- Android 12+ -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="s" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- ========================================================= -->
+    <!-- BLUETOOTH THERMAL RECEIPT PRINTER                          -->
+    <!-- ========================================================= -->
+
+    <!-- Android 11 / API 30 and below -->
+
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
+    <!-- Required for Bluetooth discovery on Android 11 and below -->
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
+
+    <!-- Android 12 / API 31+ -->
+
+    <!--
+        Allows the app to scan for nearby Bluetooth devices.
+
+        neverForLocation means the app does not use Bluetooth
+        scanning to derive the user's physical location.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+
+    <!--
+        Allows the app to communicate with paired Bluetooth devices,
+        including the thermal receipt printer.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_CONNECT"
+        tools:targetApi="s" />
+
+
+    <!-- ========================================================= -->
+    <!-- PACKAGE VISIBILITY                                         -->
+    <!-- ========================================================= -->
 
     <queries>
+
+        <!-- Required for launching the camera -->
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
+
     </queries>
+
+
+    <!-- ========================================================= -->
+    <!-- APPLICATION                                                -->
+    <!-- ========================================================= -->
 
     <application
         android:label="Fast N Fresh Cafe"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- ===================================================== -->
+        <!-- MAIN FLUTTER ACTIVITY                                  -->
+        <!-- ===================================================== -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -38,18 +113,29 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            <!-- Splash screen shown while Flutter initializes -->
+
+            <!-- Flutter normal theme -->
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme" />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <!-- Application launcher -->
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
-        <!-- Don't delete: required by Flutter for older Android versions -->
+
+
+        <!-- ===================================================== -->
+        <!-- FLUTTER ENGINE                                         -->
+        <!-- ===================================================== -->
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
     </application>
+
 </manifest>
