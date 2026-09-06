@@ -8,8 +8,22 @@ const listUsers = asyncHandler(async (req, res) => {
   const filter = {};
   if (role) filter.role = role;
 
-  const users = await User.find(filter).sort({ role: 1, name: 1 });
-  res.json({ success: true, data: users.map((u) => u.toSafeJSON()) });
+  const users = await User.find(filter).sort({ role: 1, createdAt: 1, name: 1 });
+
+  // A legacy seed/manual run can leave duplicate admin documents behind.
+  // The management screen should never show the same admin twice. Keep the
+  // oldest admin for each normalized username/phone pair. The cleanup script
+  // can permanently remove the duplicate database records.
+  const seenAdminKeys = new Set();
+  const visibleUsers = users.filter((user) => {
+    if (user.role !== 'admin') return true;
+    const key = `${String(user.username || '').toLowerCase()}|${String(user.phone || '').replace(/\D/g, '')}`;
+    if (seenAdminKeys.has(key)) return false;
+    seenAdminKeys.add(key);
+    return true;
+  });
+
+  res.json({ success: true, data: visibleUsers.map((u) => u.toSafeJSON()) });
 });
 
 // POST /api/users — create a Staff or Manager account. Creating another

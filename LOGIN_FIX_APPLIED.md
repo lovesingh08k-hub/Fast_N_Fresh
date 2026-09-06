@@ -4,7 +4,7 @@
 
 1. **Production API URL is now a safe built-in default**
    - `mobile/lib/core/network/api_config.dart` defaults to:
-     `https://fast-n-fresh-api.onrender.com/api`
+     `https://fast-n-fresh-slh9.onrender.com/api`
    - `--dart-define=API_BASE_URL=...` still overrides it for other environments.
 
 2. **Login now retries transient Render cold-start failures**

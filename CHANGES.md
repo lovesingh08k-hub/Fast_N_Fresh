@@ -60,3 +60,11 @@ For the release build, use the real production keystore.
 - Narrow receipts use a compact 30-column layout and only one feed line before cutting to reduce paper waste.
 - KOT printing follows the same saved printer-width preference.
 - Receipt header includes the cafe slogan and loyalty-points line remains removed.
+
+
+## Production hardening — September 7, 2026
+- Standardized QR menu and APK on the same Render production API.
+- QR menu no longer blocks catalog rendering on payment-settings failure; GET requests retry once for Render cold starts.
+- Product search is now safe, category-aware, and debounced in Flutter with stale-response protection and clear-search UX.
+- Added duplicate-admin cleanup command and defensive admin-list deduplication.
+- Product uploads are persisted in MongoDB so new product thumbnails survive Render restarts/redeploys; legacy disk URLs remain supported.

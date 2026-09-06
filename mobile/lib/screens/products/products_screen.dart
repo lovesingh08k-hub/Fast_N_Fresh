@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -26,7 +28,10 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
   List<Product> _products = [];
   List<Category> _categories = [];
   bool _loading = true;
+  bool _searching = false;
   String? _error;
+  Timer? _searchDebounce;
+  int _searchGeneration = 0;
 
   AppLifecycleState? _lastLifecycleState;
   ConnectivityProvider? _connectivity;
@@ -56,6 +61,8 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connectivity?.removeListener(_handleConnectivityChange);
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -84,24 +91,60 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
     _wasOnline = isOnline;
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool searchOnly = false}) async {
+    final generation = ++_searchGeneration;
+    final query = _searchController.text.trim();
+
+    if (mounted) {
+      setState(() {
+        _error = null;
+        if (searchOnly && _products.isNotEmpty) {
+          _searching = true;
+        } else {
+          _loading = true;
+        }
+      });
+    }
+
     try {
-      final results = await Future.wait([_productService.list(search: _searchController.text.trim()), _categoryService.list()]);
+      final productFuture = _productService.list(search: query);
+      final results = searchOnly
+          ? <dynamic>[await productFuture, _categories]
+          : await Future.wait([productFuture, _categoryService.list()]);
+
+      if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _products = results[0] as List<Product>;
-        _categories = results[1] as List<Category>;
+        if (!searchOnly) _categories = results[1] as List<Category>;
       });
     } on ApiException catch (e) {
+      if (!mounted || generation != _searchGeneration) return;
       setState(() => _error = e.message);
     } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
       setState(() => _error = 'Could not load products.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _searchGeneration) {
+        setState(() {
+          _loading = false;
+          _searching = false;
+        });
+      }
     }
+  }
+
+  void _onSearchChanged(String value) {
+    if (mounted) setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _load(searchOnly: true);
+    });
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    _load(searchOnly: true);
   }
 
   Future<void> _openForm({Product? product}) async {
@@ -144,12 +187,24 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
             padding: EdgeInsets.fromLTRB(16, 10, 16, 6),
             child: TextField(
               controller: _searchController,
-              onSubmitted: (_) => _load(),
+              onChanged: _onSearchChanged,
+              onSubmitted: (_) {
+                _searchDebounce?.cancel();
+                _load(searchOnly: true);
+              },
+              textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Search products…',
-                prefixIcon: Icon(Icons.search, size: 20),
+                hintText: 'Search products or category…',
+                prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
-                suffixIcon: IconButton(icon: Icon(Icons.search, size: 18), onPressed: _load),
+                suffixIcon: _searching
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    : (_searchController.text.isNotEmpty
+                        ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: _clearSearch)
+                        : IconButton(icon: const Icon(Icons.search, size: 18), onPressed: () => _load(searchOnly: true))),
               ),
             ),
           ),

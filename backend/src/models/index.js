@@ -13,4 +13,5 @@ module.exports = {
   Table: require('./Table'),
   AuditLog: require('./AuditLog'),
   Feedback: require('./Feedback'),
+  ImageAsset: require('./ImageAsset'),
 };

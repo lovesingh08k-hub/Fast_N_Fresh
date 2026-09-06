@@ -4,6 +4,6 @@ QR URLs look like:
 https://lovesingh08k-hub.github.io/Fast_N_Fresh?table=1
 
 The static menu calls the production API at:
-https://fast-n-fresh-api.onrender.com/api
+https://fast-n-fresh-slh9.onrender.com/api
 
 The backend keeps /menu for backward compatibility, but new QR codes use the static host.

@@ -1,4 +1,14 @@
-const { Product, InventoryTransaction } = require('../models');
+const { Product, InventoryTransaction, ImageAsset } = require('../models');
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function linkImageAsset(productId, imageUrl) {
+  const match = String(imageUrl || '').match(/^\/uploads\/products\/([a-f0-9]{24})$/i);
+  if (!match) return;
+  await ImageAsset.findByIdAndUpdate(match[1], { product: productId });
+}
 const { ApiError, asyncHandler } = require('../utils/apiError');
 
 // GET /api/products?search=&category=&status=&page=&limit=
@@ -10,7 +20,20 @@ const listProducts = asyncHandler(async (req, res) => {
   const filter = { isDeleted: false };
   if (category) filter.category = category;
   if (status) filter.status = status;
-  if (search) filter.name = { $regex: search, $options: 'i' };
+
+  const safeSearch = typeof search === 'string' ? search.trim() : '';
+  if (safeSearch) {
+    const pattern = escapeRegex(safeSearch);
+    const matchingCategories = await require('../models').Category.find({
+      name: { $regex: pattern, $options: 'i' },
+      status: { $ne: 'inactive' },
+    }).select('_id');
+    const categoryIds = matchingCategories.map((c) => c._id);
+    filter.$or = [
+      { name: { $regex: pattern, $options: 'i' } },
+      ...(categoryIds.length ? [{ category: { $in: categoryIds } }] : []),
+    ];
+  }
 
   let products = await Product.find(filter)
     .populate('category', 'name')
@@ -56,6 +79,8 @@ const createProduct = asyncHandler(async (req, res) => {
     imageUrl: imageUrl || '',
   });
 
+  await linkImageAsset(product._id, product.imageUrl);
+
   if (product.stock > 0) {
     await InventoryTransaction.create({
       product: product._id,
@@ -80,6 +105,7 @@ const updateProduct = asyncHandler(async (req, res) => {
   });
 
   await product.save();
+  await linkImageAsset(product._id, product.imageUrl);
   res.json({ success: true, data: product });
 });
 

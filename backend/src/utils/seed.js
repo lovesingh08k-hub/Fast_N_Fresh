@@ -50,6 +50,21 @@ async function seed() {
     console.log(`  Updated admin user and password: ${adminUsername}`);
   }
 
+  // Remove legacy duplicate admin documents after the canonical admin is
+  // updated. Never touch manager/staff accounts.
+  const duplicateAdmins = await User.find({
+    role: 'admin',
+    _id: { $ne: admin._id },
+  }).select('_id username phone');
+
+  if (duplicateAdmins.length) {
+    await User.deleteMany({
+      _id: { $in: duplicateAdmins.map((u) => u._id) },
+      role: 'admin',
+    });
+    console.log(`  Removed duplicate admin account(s): ${duplicateAdmins.length}`);
+  }
+
   // --- Manager user ---
   const managerUsername = (
     process.env.SEED_MANAGER_USERNAME || 'manager'

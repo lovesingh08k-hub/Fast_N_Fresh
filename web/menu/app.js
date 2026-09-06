@@ -218,7 +218,7 @@
     showState('errorState');
   }
 
-  async function apiRequest(path, options = {}) {
+  async function apiRequest(path, options = {}, attempt = 0) {
     if (
       !API_BASE_URL ||
       API_BASE_URL.includes(
@@ -257,6 +257,14 @@
         }
       );
     } catch (error) {
+      // Render can briefly cold-start. Retry GET requests once before showing
+      // the customer an error. Never retry POST requests automatically.
+      const method = String(options.method || 'GET').toUpperCase();
+      if (method === 'GET' && attempt === 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        return apiRequest(path, options, 1);
+      }
+
       if (error?.name === 'AbortError') {
         throw new Error(
           'Cafe server is waking up. Please wait a moment and try again.'
@@ -511,13 +519,9 @@
       state.tableName =
         tableResponse.data.tableName;
 
-      const [
-        menuResponse,
-        paymentResponse,
-      ] = await Promise.all([
-        apiRequest('/public/menu'),
-        apiRequest('/public/payment-options'),
-      ]);
+      // The menu is the primary customer experience. Payment configuration
+      // must never prevent the catalog from rendering.
+      const menuResponse = await apiRequest('/public/menu');
 
       state.categories =
         menuResponse.categories || [];
@@ -525,9 +529,18 @@
       state.items =
         menuResponse.items || [];
 
-      state.paymentOptions =
-        paymentResponse.data ||
-        state.paymentOptions;
+      try {
+        const paymentResponse = await apiRequest('/public/payment-options');
+        state.paymentOptions =
+          paymentResponse.data || state.paymentOptions;
+      } catch (_) {
+        // Keep the menu usable when payment settings are unavailable.
+        state.paymentOptions = {
+          ...state.paymentOptions,
+          onlineUpi: false,
+          upiId: '',
+        };
+      }
 
       /*
        * IMPORTANT:

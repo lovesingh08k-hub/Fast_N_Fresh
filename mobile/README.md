@@ -28,7 +28,7 @@ device itself, not your development PC.
 |---|---|
 | Android Emulator, backend on your dev PC | `http://10.0.2.2:5000/api` (default, no flag needed) |
 | Physical device on the same Wi-Fi | `http://<your-computer-LAN-IP>:5000/api` |
-| Production | `https://fast-n-fresh-api.onrender.com/api` (built-in default; --dart-define can override it) |
+| Production | `https://fast-n-fresh-slh9.onrender.com/api` (built-in default; --dart-define can override it) |
 
 ```bash
 # Emulator (uses the built-in default — no flag needed)

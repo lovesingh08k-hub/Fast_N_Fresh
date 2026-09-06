@@ -22,6 +22,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const connectDB = require('./config/db');
 const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
+const { ImageAsset } = require('./models');
 
 const app = express();
 
@@ -88,6 +89,21 @@ if (process.env.NODE_ENV !== 'test') {
 // Serves uploaded product photos at e.g. GET /uploads/products/xyz.jpg —
 // the Flutter app stores/loads the relative URL returned at upload time and
 // resolves it against ApiConfig.baseUrl, so no path is ever hard-coded.
+app.get('/uploads/products/:assetId', async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.assetId)) return next();
+    const asset = await ImageAsset.findById(req.params.assetId).select('data contentType');
+    if (!asset) return next();
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.type(asset.contentType);
+    res.send(asset.data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Legacy disk-backed images remain supported for old products. New uploads
+// use the Mongo-backed route above and therefore survive Render restarts.
 app.use(
   '/uploads',
   express.static(path.join(__dirname, '..', 'uploads'))
