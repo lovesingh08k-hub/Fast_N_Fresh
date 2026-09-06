@@ -102,7 +102,7 @@ const getPublicPaymentOptions = asyncHandler(async (req, res) => {
       cafeName: settings.cafeName || 'FAST N FRESH CAFE',
       // Online payment is visible only when a real server-verifiable provider
       // is configured. A BusinessSettings UPI ID alone is not sufficient.
-      onlineUpi: provider.name !== 'unconfigured',
+      onlineUpi: Boolean(String(settings.upiId || '').trim()) && settings.onlineUpi !== false,
       paymentProvider: provider.name,
     },
   });
