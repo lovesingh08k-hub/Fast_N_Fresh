@@ -200,24 +200,39 @@ class _KitchenScreenState extends State<KitchenScreen> with WidgetsBindingObserv
             ...order.items.map((i) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [Text('${i.quantity}×', style: const TextStyle(fontWeight: FontWeight.w900)), const SizedBox(width: 10), Expanded(child: Text(i.name, style: const TextStyle(fontWeight: FontWeight.w600)))]))),
             if (order.notes?.trim().isNotEmpty == true) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Note: ${order.notes}', style: const TextStyle(fontStyle: FontStyle.italic))),
             const SizedBox(height: 10),
-            Row(children: [
-              _paymentChip(order),
-              const SizedBox(width: 6),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => KotScreen(order: order)),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _paymentChip(order),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => KotScreen(order: order)),
+                  ),
+                  icon: const Icon(Icons.receipt_long, size: 16),
+                  label: const Text('KOT'),
                 ),
-                icon: const Icon(Icons.receipt_long, size: 16),
-                label: const Text('KOT'),
-              ),
-              const Spacer(),
-              if (!isReady) ...[
-                TextButton(onPressed: () => _cancel(order), child: Text('Cancel', style: TextStyle(color: AppColors.danger))),
-                const SizedBox(width: 4),
-                FilledButton.icon(onPressed: () => _advance(order), icon: Icon(isNew ? Icons.play_arrow : Icons.check, size: 18), label: Text(isNew ? 'Accept & Prepare' : 'Mark Ready')),
-              ] else
-                OutlinedButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrderDetailScreen(orderId: order.id))), icon: const Icon(Icons.receipt_long, size: 18), label: const Text('Open Bill')),
-            ]),
+                if (!isReady) ...[
+                  TextButton(
+                    onPressed: () => _cancel(order),
+                    child: Text('Cancel', style: TextStyle(color: AppColors.danger)),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => _advance(order),
+                    icon: Icon(isNew ? Icons.play_arrow : Icons.check, size: 18),
+                    label: Text(isNew ? 'Accept & Prepare' : 'Mark Ready'),
+                  ),
+                ] else
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => OrderDetailScreen(orderId: order.id)),
+                    ),
+                    icon: const Icon(Icons.receipt_long, size: 18),
+                    label: const Text('Open Bill'),
+                  ),
+              ],
+            ),
           ]),
         ),
       ),
