@@ -1,41 +1,9 @@
-// One-off maintenance script: safely reset the `orderNumber` sequence so the
-// NEXT new order becomes #1, WITHOUT deleting any historical orders.
+// One-off maintenance utility for safely resetting the human-readable order
+// sequence. Existing orders are retained and, when explicitly archived, moved
+// above ARCHIVE_OFFSET so the next real order can be #1.
 //
-// WHY THIS ISN'T A ONE-LINE "SET COUNTER TO 0":
-// `Order.orderNumber` has a `unique: true` index (see models/Order.js). If
-// orders #1-#55 already exist in the database and we just reset the counter
-// to 0, the very next order would try to become #1 again and the insert
-// would fail with a duplicate-key error (or, worse, if the unique index were
-// ever missing, it would silently create a second real order numbered #1 —
-// a serious billing/reporting bug). So this script:
-//
-//   1. Connects to the database and reports the current counter value, the
-//      highest existing Order.orderNumber, and how many orders exist.
-//   2. If there are ZERO existing orders, it is always safe to reset the
-//      counter to 0 (next order -> #1). It does this automatically.
-//   3. If orders already exist, it REFUSES to touch anything by default,
-//      and explains why, unless you explicitly pass --archive-existing.
-//
-// --archive-existing mode (only for orders you truly don't want counted as
-// "real" production history, e.g. test orders from development):
-//   - Does NOT delete any order document.
-//   - Tags every existing order with `preLaunchTestData: true` so it can
-//     still be found/audited later (e.g. `Order.find({ preLaunchTestData: true })`).
-//   - Shifts each existing order's `orderNumber` by +1,000,000 (e.g. #56 ->
-//     #1000056) so the low numbers (1, 2, 3, ...) become free again while
-//     every number stays unique (no collisions, unique index stays valid).
-//   - Resets the counter to 0, so the next new order becomes #1.
-//
-// Run (dry run / report only):
-//   node backend/src/utils/resetOrderCounter.js
-//
-// Run (actually archive existing orders and free up numbering from 1):
-//   node backend/src/utils/resetOrderCounter.js --archive-existing
-//
-// NOTE: This script was NOT run against your production database from this
-// environment — there is no network path from this sandbox to your MongoDB
-// Atlas cluster. You (or your deploy pipeline) need to run it against the
-// real database.
+// This module can be run from the CLI OR called by the temporary authenticated
+// maintenance endpoint. It never accepts a MongoDB URI from an HTTP request.
 
 require('dotenv').config();
 
@@ -48,9 +16,7 @@ const { Order, Counter } = require('../models');
 
 const ARCHIVE_OFFSET = 1000000;
 
-async function main() {
-  const archive = process.argv.includes('--archive-existing');
-
+async function resetOrderCounter({ archiveExisting = false } = {}) {
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri) {
     throw new Error('MONGODB_URI is not configured.');
@@ -64,62 +30,132 @@ async function main() {
   const highest = await Order.findOne({}).sort({ orderNumber: -1 }).select('orderNumber').lean();
   const counterDoc = await Counter.findById('orderNumber').lean();
 
-  console.log('Current state:');
-  console.log(`  Existing orders        : ${totalOrders}`);
-  console.log(`  Highest orderNumber    : ${highest ? highest.orderNumber : '(none)'}`);
-  console.log(`  Counter("orderNumber") : ${counterDoc ? counterDoc.seq : '(not created yet)'}`);
-  console.log('');
+  const state = {
+    existingOrders: totalOrders,
+    highestOrderNumber: highest ? highest.orderNumber : null,
+    counter: counterDoc ? counterDoc.seq : null,
+  };
 
   if (totalOrders === 0) {
-    await Counter.findByIdAndUpdate('orderNumber', { $set: { seq: 0 } }, { upsert: true });
-    console.log('No existing orders found — safe to reset.');
-    console.log('Counter("orderNumber") reset to 0. The next order will be #1.');
-    await mongoose.disconnect();
-    process.exit(0);
-    return;
-  }
-
-  if (!archive) {
-    console.log(`${totalOrders} order(s) already exist, including orderNumber #${highest.orderNumber}.`);
-    console.log('Refusing to reset the counter: the next order would try to reuse an');
-    console.log('orderNumber that is already taken, which the unique index on');
-    console.log('Order.orderNumber would reject (or, if that index were ever missing,');
-    console.log('would create a duplicate real order number).');
-    console.log('');
-    console.log('Nothing was changed. If these are pre-launch/test orders you want out');
-    console.log('of the way (kept, not deleted, but renumbered above 1,000,000 and');
-    console.log('tagged preLaunchTestData: true) so real orders can start at #1, re-run:');
-    console.log('');
-    console.log('  node backend/src/utils/resetOrderCounter.js --archive-existing');
-    await mongoose.disconnect();
-    process.exit(0);
-    return;
-  }
-
-  console.log(`Archiving ${totalOrders} existing order(s)...`);
-  const allOrders = await Order.find({}).select('_id orderNumber').sort({ orderNumber: 1 }).lean();
-
-  for (const o of allOrders) {
-    if (o.orderNumber >= ARCHIVE_OFFSET) continue; // already archived, skip
-    await Order.updateOne(
-      { _id: o._id },
-      { $set: { orderNumber: o.orderNumber + ARCHIVE_OFFSET, preLaunchTestData: true } }
+    await Counter.findByIdAndUpdate(
+      'orderNumber',
+      { $set: { seq: 0 } },
+      { upsert: true }
     );
+    return {
+      ...state,
+      changed: true,
+      archived: 0,
+      nextOrderNumber: 1,
+      message: 'No existing orders found. Counter reset to 0; the next order will be #1.',
+    };
   }
 
-  await Counter.findByIdAndUpdate('orderNumber', { $set: { seq: 0 } }, { upsert: true });
+  if (!archiveExisting) {
+    return {
+      ...state,
+      changed: false,
+      archived: 0,
+      nextOrderNumber: (counterDoc ? counterDoc.seq : 0) + 1,
+      message: 'Existing orders found. Nothing was changed. Pass archiveExisting=true to archive them and restart at #1.',
+    };
+  }
 
-  console.log('Done.');
-  console.log(`  ${allOrders.length} order(s) renumbered into the 1,000,000+ range and tagged preLaunchTestData: true.`);
-  console.log('  Counter("orderNumber") reset to 0. The next new order will be #1.');
-  console.log('  No order documents were deleted.');
+  const session = await mongoose.startSession();
+  let archived = 0;
 
-  await mongoose.disconnect();
-  process.exit(0);
+  try {
+    await session.withTransaction(async () => {
+      const orders = await Order.find({})
+        .select('_id orderNumber')
+        .sort({ orderNumber: 1, _id: 1 })
+        .session(session)
+        .lean();
+
+      // First move every existing number to a temporary negative value. This
+      // avoids collisions with the final 1,000,000+ values while the unique
+      // orderNumber index remains enabled.
+      for (let i = 0; i < orders.length; i += 1) {
+        await Order.updateOne(
+          { _id: orders[i]._id },
+          {
+            $set: {
+              orderNumber: -(ARCHIVE_OFFSET + i + 1),
+              preLaunchTestData: true,
+            },
+          },
+          { session }
+        );
+      }
+
+      // Then assign the permanent archived numbers.
+      for (const order of orders) {
+        await Order.updateOne(
+          { _id: order._id },
+          { $set: { orderNumber: order.orderNumber + ARCHIVE_OFFSET } },
+          { session }
+        );
+      }
+
+      await Counter.findByIdAndUpdate(
+        'orderNumber',
+        { $set: { seq: 0 } },
+        { upsert: true, session }
+      );
+
+      archived = orders.length;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return {
+    ...state,
+    changed: true,
+    archived,
+    nextOrderNumber: 1,
+    message: `Archived ${archived} existing order(s). Counter reset to 0; the next order will be #1.`,
+  };
 }
 
-main().catch(async (err) => {
-  console.error('Reset failed:', err.message || err);
-  try { await mongoose.disconnect(); } catch (_) {}
-  process.exit(1);
-});
+async function main() {
+  const archiveExisting = process.argv.includes('--archive-existing');
+
+  try {
+    console.log('========================================');
+    console.log('ORDER COUNTER RESET');
+    console.log('========================================');
+
+    const result = await resetOrderCounter({ archiveExisting });
+
+    console.log('Current state:');
+    console.log(`  Existing orders        : ${result.existingOrders}`);
+    console.log(`  Highest orderNumber    : ${result.highestOrderNumber ?? '(none)'}`);
+    console.log(`  Counter("orderNumber") : ${result.counter ?? '(not created yet)'}`);
+    console.log('');
+    console.log(result.message);
+
+    if (!result.changed && result.existingOrders > 0) {
+      console.log('');
+      console.log('Nothing was changed.');
+      console.log('To archive pre-launch/test orders and restart numbering at #1:');
+      console.log('  node src/utils/resetOrderCounter.js --archive-existing');
+    }
+  } finally {
+    await mongoose.disconnect();
+  }
+}
+
+if (require.main === module) {
+  main().catch(async (err) => {
+    console.error('');
+    console.error('========================================');
+    console.error('RESET FAILED');
+    console.error('========================================');
+    console.error(err.message || err);
+    try { await mongoose.disconnect(); } catch (_) {}
+    process.exit(1);
+  });
+}
+
+module.exports = { resetOrderCounter, ARCHIVE_OFFSET };

@@ -17,6 +17,9 @@ const orderItemSchema = new mongoose.Schema(
 const orderSchema = new mongoose.Schema(
   {
     orderNumber: { type: Number, required: true, unique: true }, // sequential, human-readable; unique:true already builds the index
+    // Marks orders archived during the one-time pre-launch numbering reset.
+    // These records are retained for audit/history but are excluded from the new production sequence.
+    preLaunchTestData: { type: Boolean, default: false, index: true },
 
     // Idempotency guard. The Flutter app generates one UUID per checkout
     // attempt (persisted for the lifetime of that bill/payment sheet) and
