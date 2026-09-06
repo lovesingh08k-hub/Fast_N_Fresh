@@ -323,6 +323,25 @@
 
   const PENDING_ORDER_KEY = 'fnf_last_order';
   const PENDING_UPI_ORDER_KEY = 'fnf_pending_upi_order';
+  const UPI_SESSION_KEY = 'fnf_upi_session_active';
+
+  function hasActiveUpiSession() {
+    try {
+      return sessionStorage.getItem(UPI_SESSION_KEY) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function setActiveUpiSession(active) {
+    try {
+      if (active) {
+        sessionStorage.setItem(UPI_SESSION_KEY, '1');
+      } else {
+        sessionStorage.removeItem(UPI_SESSION_KEY);
+      }
+    } catch (_) {}
+  }
 
   function clearPendingOrder() {
     try {
@@ -1561,6 +1580,7 @@
           PENDING_UPI_ORDER_KEY,
           JSON.stringify(state.upiOrder)
         );
+        setActiveUpiSession(true);
       } catch (_) {}
 
       showUpiPendingState();
@@ -1624,6 +1644,15 @@
   }
 
   async function tryRestorePendingUpiOrder() {
+    // localStorage survives QR scans/browser restarts. Only restore a UPI
+    // attempt when this same browser session explicitly started it. A fresh
+    // QR scan should always open the normal menu, not an old payment screen.
+    if (!hasActiveUpiSession()) {
+      try { localStorage.removeItem(PENDING_UPI_ORDER_KEY); } catch (_) {}
+      state.upiOrder = null;
+      return false;
+    }
+
     let pending = null;
     try {
       const raw = localStorage.getItem(PENDING_UPI_ORDER_KEY);
@@ -1631,6 +1660,17 @@
     } catch (_) {}
 
     if (!pending || !pending.orderId || !pending.token || !pending.upiUrl) {
+      try { localStorage.removeItem(PENDING_UPI_ORDER_KEY); } catch (_) {}
+      setActiveUpiSession(false);
+      return false;
+    }
+
+    // Never carry a payment attempt from another table into a newly scanned
+    // table QR code.
+    if (pending.tableNumber && String(pending.tableNumber) !== String(state.tableNumber)) {
+      try { localStorage.removeItem(PENDING_UPI_ORDER_KEY); } catch (_) {}
+      setActiveUpiSession(false);
+      state.upiOrder = null;
       return false;
     }
 
@@ -1642,6 +1682,7 @@
 
       if (data.status === 'voided' || data.paymentStatus === 'cancelled') {
         localStorage.removeItem(PENDING_UPI_ORDER_KEY);
+        setActiveUpiSession(false);
         return false;
       }
 
@@ -1655,9 +1696,16 @@
 
       showUpiPendingState();
       return true;
-    } catch (_) {
-      // Keep the pending record; a temporary Render/network failure should not
-      // make the customer lose the payment attempt.
+    } catch (error) {
+      // Invalid/expired tracking records should never trap the customer on
+      // the payment screen. Temporary server/network failures may be kept.
+      if ([400, 401, 403, 404].includes(error?.status)) {
+        try { localStorage.removeItem(PENDING_UPI_ORDER_KEY); } catch (_) {}
+        setActiveUpiSession(false);
+        state.upiOrder = null;
+        return false;
+      }
+
       state.upiOrder = pending;
       showUpiPendingState();
       return true;
@@ -1685,6 +1733,7 @@
       state.upiOrder = null;
       state.clientRequestId = null;
       try { localStorage.removeItem(PENDING_UPI_ORDER_KEY); } catch (_) {}
+      setActiveUpiSession(false);
 
       showState('app');
       openCart();
@@ -2267,6 +2316,7 @@
     els.doneBtn.addEventListener(
       'click',
       () => {
+        setActiveUpiSession(false);
         stopOrderTracking();
 
         state.tracking.orderId =

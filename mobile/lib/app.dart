@@ -28,6 +28,8 @@ class FastNFreshApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: context.watch<ThemeProvider>().themeMode,
+      themeAnimationDuration: const Duration(milliseconds: 360),
+      themeAnimationCurve: Curves.easeInOutCubic,
       home: ConnectivityBanner(child: _RootRouter()),
     );
   }

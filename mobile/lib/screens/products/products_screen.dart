@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -36,6 +37,9 @@ class _ProductsScreenState extends State<ProductsScreen>
 
   ConnectivityProvider? _connectivity;
   bool _wasOnline = true;
+  Timer? _searchDebounce;
+  int _searchRequestId = 0;
+  bool _searching = false;
 
   @override
   void initState() {
@@ -52,8 +56,10 @@ class _ProductsScreenState extends State<ProductsScreen>
 
     if (!identical(connectivity, _connectivity)) {
       _connectivity?.removeListener(_handleConnectivityChange);
+
       _connectivity = connectivity;
       _wasOnline = connectivity.isOnline;
+
       _connectivity!.addListener(_handleConnectivityChange);
     }
   }
@@ -62,6 +68,7 @@ class _ProductsScreenState extends State<ProductsScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connectivity?.removeListener(_handleConnectivityChange);
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -102,6 +109,10 @@ class _ProductsScreenState extends State<ProductsScreen>
     }
 
     try {
+      // Load the catalog once.
+      // Product search is local and instant after loading.
+      // This avoids a network request for every search query.
+      // Search works against both product names and category names.
       final results = await Future.wait([
         _productService.list(),
         _categoryService.list(),
@@ -152,10 +163,49 @@ class _ProductsScreenState extends State<ProductsScreen>
   }
 
   void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    final query = value.trim();
+    if (query.isEmpty) {
+      _searchRequestId++;
+      setState(_applySearch);
+      return;
+    }
+
+    // Show the local result immediately, then ask the backend so searches
+    // are not limited to the first page of products.
     setState(_applySearch);
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      _searchProducts(query);
+    });
+  }
+
+  Future<void> _searchProducts(String query) async {
+    final requestId = ++_searchRequestId;
+    if (mounted) setState(() => _searching = true);
+
+    try {
+      final results = await _productService.list(search: query);
+      if (!mounted || requestId != _searchRequestId ||
+          _searchController.text.trim() != query) return;
+      setState(() => _products = results);
+    } on ApiException catch (e) {
+      if (!mounted || requestId != _searchRequestId) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Search failed: ${e.message}')),
+      );
+    } catch (_) {
+      // Keep the instant local results if the backend search is temporarily
+      // unavailable.
+    } finally {
+      if (mounted && requestId == _searchRequestId) {
+        setState(() => _searching = false);
+      }
+    }
   }
 
   void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchRequestId++;
     _searchController.clear();
     setState(_applySearch);
   }
@@ -263,6 +313,7 @@ class _ProductsScreenState extends State<ProductsScreen>
               ),
             ),
           ),
+          if (_searching) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: _loading
                 ? LoadingState()
@@ -347,8 +398,12 @@ class _ProductTile extends StatelessWidget {
                       width: 52,
                       height: 52,
                       fit: BoxFit.cover,
+
+                      // Avoid decoding a multi-megapixel upload
+                      // when it only needs to display at 52px.
                       cacheWidth: 52 * 3,
                       cacheHeight: 52 * 3,
+
                       errorBuilder: (_, __, ___) =>
                           _imagePlaceholder(),
                     )
