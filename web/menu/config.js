@@ -2,7 +2,6 @@
 //
 // This static menu is deployed to GitHub Pages, so QR customers do not hit
 // the Render backend just to load the HTML and wait for a cold start.
-//
 // The menu then calls the production API below.
 //
 // IMPORTANT:

@@ -196,10 +196,8 @@
   <!--
     Online payment state.
 
-    This screen is only used for a payment transaction that is handled
-    through the configured payment gateway and verified by the server.
-
-    Payments are verified securely through the payment gateway.
+    The customer is handed off to their installed UPI app. Returning to
+    this page never marks the payment as paid; cafe staff verify the payment.
   -->
   <section
     id="upiPendingState"
@@ -225,8 +223,8 @@
 
 
     <p id="upiPendingSubtext">
-      Complete your payment securely through the payment gateway.
-      Your payment status will be verified automatically by the server.
+      Complete the payment in your UPI app. Return to this page when done.
+      The cafe will verify the payment before marking the order as paid.
     </p>
 
 
@@ -255,7 +253,7 @@
       class="secondary-btn upi-pay-btn"
       type="button"
     >
-      Continue Payment
+      OPEN UPI AGAIN
     </button>
 
 
@@ -275,18 +273,18 @@
       <div>
 
         <div class="order-status-kicker">
-          PAYMENT VERIFICATION
+          PAYMENT STATUS
         </div>
 
         <div
           id="upiPendingStatusText"
           class="order-status-text"
         >
-          Waiting for payment verification
+          UPI payment started — waiting for cafe verification
         </div>
 
         <div class="order-status-help">
-          Your payment status is checked automatically by the server.
+          Returning from the UPI app is not proof of payment.
         </div>
 
       </div>

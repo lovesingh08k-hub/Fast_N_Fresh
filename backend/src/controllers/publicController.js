@@ -129,11 +129,6 @@ const createPublicOrder = asyncHandler(async (req, res) => {
   }
 
   const normalizedPaymentMethod = paymentMethod === 'UPI' ? 'UPI' : 'CASH';
-  if (normalizedPaymentMethod === 'UPI') {
-    // Online payments must go through /public/payments so no final Order is
-    // created before a server-verifiable payment succeeds.
-    throw new ApiError(409, 'Online payment must be completed through the payment gateway.');
-  }
 
   const tableNum = Number(tableNumber);
   if (!Number.isInteger(tableNum) || tableNum < 1) {
@@ -224,10 +219,11 @@ const createPublicOrder = asyncHandler(async (req, res) => {
 
   const orderNumber = await Counter.getNextSequence('orderNumber');
 
-  // Public QR order creation is intentionally CASH-only. Online payments use
-  // the separate PaymentTransaction flow and create the final Order only after
-  // server-side payment verification.
-  const initialPaymentStatus = 'pending';
+  // A QR UPI order is created when the customer starts the UPI intent so
+  // staff can see the payment attempt immediately. This is NOT proof of
+  // payment. Staff checkout remains the only place that marks it paid.
+  const initialPaymentStatus =
+    normalizedPaymentMethod === 'UPI' ? 'payment_initiated' : 'pending';
 
   let order;
   try {
@@ -248,6 +244,7 @@ const createPublicOrder = asyncHandler(async (req, res) => {
       grandTotal,
       paymentMethod: normalizedPaymentMethod,
       paymentStatus: initialPaymentStatus,
+      paymentInitiatedAt: normalizedPaymentMethod === 'UPI' ? new Date() : undefined,
       paymentBreakdown: { cash: 0, upi: 0, credit: 0 },
       notes: note ? note.trim() : undefined,
       status: 'open',
