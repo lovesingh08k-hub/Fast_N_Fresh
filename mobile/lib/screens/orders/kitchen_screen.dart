@@ -8,6 +8,7 @@ import '../../models/order.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../services/order_service.dart';
 import 'order_detail_screen.dart';
+import 'kot_screen.dart';
 
 class KitchenScreen extends StatefulWidget {
   const KitchenScreen({super.key});
@@ -201,6 +202,14 @@ class _KitchenScreenState extends State<KitchenScreen> with WidgetsBindingObserv
             const SizedBox(height: 10),
             Row(children: [
               _paymentChip(order),
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => KotScreen(order: order)),
+                ),
+                icon: const Icon(Icons.receipt_long, size: 16),
+                label: const Text('KOT'),
+              ),
               const Spacer(),
               if (!isReady) ...[
                 TextButton(onPressed: () => _cancel(order), child: Text('Cancel', style: TextStyle(color: AppColors.danger))),

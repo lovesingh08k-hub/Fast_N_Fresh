@@ -16,8 +16,9 @@ import 'bluetooth_printer_service.dart';
 /// The layout intentionally follows a classic printed POS receipt:
 /// centered cafe header, TAX INVOICE, compact bill metadata, fixed columns
 /// for Item / Qty / Rate / Amount, discount, CGST/SGST, grand total, GST and
-/// a simple closing footer. It works with both 58 mm and 80 mm rolls.
+/// a simple closing footer. It works with both 55 mm and 80 mm rolls.
 class ReceiptService {
+  static const double width55mm = 55 * PdfPageFormat.mm;
   static const double width58mm = 58 * PdfPageFormat.mm;
   static const double width80mm = 80 * PdfPageFormat.mm;
 
@@ -30,149 +31,78 @@ class ReceiptService {
     double widthMm = 80,
   }) async {
     final doc = pw.Document();
-    final is58 = widthMm <= 60;
-    final chars = is58 ? 30 : 42;
+    final isNarrow = widthMm <= 60;
+    final chars = isNarrow ? 30 : 42;
     final fontSize = is58 ? 7.2 : 8.2;
     final smallSize = is58 ? 6.4 : 7.2;
-
-    // Enough room for the receipt while remaining a finite, valid PDF page.
     final format = _receiptFormat(widthMm, order.items.length);
 
     final totalTax = order.tax;
     final halfTax = totalTax / 2;
     final taxRate = settings.taxEnabled ? settings.taxPercent : 0;
     final halfRate = taxRate / 2;
-    final discountPercent = order.subtotal > 0
-        ? (order.discount / order.subtotal) * 100
-        : 0;
-
     final cafeName = _fit(settings.cafeName, chars);
-    final tagline = _fit(settings.tagline, chars);
     final address = _wrap(settings.address, chars);
     final phone = settings.phone.trim();
-    final billNo = order.orderNumber.toString();
-    final staff = (order.staffName?.trim().isNotEmpty ?? false)
-        ? order.staffName!.trim()
-        : 'COUNTER';
+    final gst = settings.gstNumber.trim();
+    final orderFrom = order.tableName?.trim().isNotEmpty == true
+        ? 'Table ${order.tableName!.trim()}'
+        : order.orderType == 'delivery'
+            ? 'Delivery'
+            : order.orderType == 'takeaway'
+                ? 'Take Away'
+                : 'Dine In';
 
     doc.addPage(
       pw.Page(
         pageFormat: format,
-        theme: pw.ThemeData.withFont(
-          base: _mono,
-          bold: _monoBold,
-        ),
+        theme: pw.ThemeData.withFont(base: _mono, bold: _monoBold),
         build: (_) {
           final widgets = <pw.Widget>[];
-
           widgets.add(_center(cafeName, fontSize + 2, bold: true));
-          if (tagline.isNotEmpty) widgets.add(_center(tagline, fontSize));
-          for (final line in address) {
-            widgets.add(_center(line, smallSize));
-          }
-          if (phone.isNotEmpty) {
-            widgets.add(_center('Ph: $phone', smallSize));
-          }
-
-          widgets.add(_gap(3));
-          widgets.add(_center(_dash(chars), fontSize));
-          widgets.add(_center('TAX INVOICE', fontSize + 1, bold: true));
-          widgets.add(_center(_dash(chars), fontSize));
-          widgets.add(_gap(3));
-
-          widgets.add(
-            _twoColumn(
-              'Date: ${Formatters.date(order.createdAt)}',
-              'Bill No. : $billNo',
-              chars,
-              fontSize,
-            ),
-          );
-          widgets.add(_line('PBoy: $staff', fontSize));
-
-          if (order.tableName?.trim().isNotEmpty ?? false) {
-            widgets.add(_line('Table: ${order.tableName!.trim()}', fontSize));
-          }
+          widgets.add(_center('The food which makes you happy', smallSize));
+          if (phone.isNotEmpty) widgets.add(_center('Phone: $phone', smallSize));
+          for (final line in address) widgets.add(_center(line, smallSize));
+          if (gst.isNotEmpty) widgets.add(_center('GST: $gst', smallSize));
 
           widgets.add(_gap(3));
           widgets.add(_line(_dash(chars), fontSize));
-          widgets.add(_threeColumnHeader(chars, fontSize));
+          widgets.add(_line('Order from: ${_fit(orderFrom, chars)}', fontSize));
+          widgets.add(_twoColumn(
+            '${Formatters.date(order.createdAt)} ${Formatters.time(order.createdAt)}',
+            'Bill #${order.orderNumber}',
+            chars,
+            fontSize,
+          ));
+          if (order.tableCustomerLabel?.trim().isNotEmpty == true) {
+            widgets.add(_line('Customer: ${_fit(order.tableCustomerLabel!.trim(), chars)}', fontSize));
+          }
+          widgets.add(_line(_dash(chars), fontSize));
+          widgets.add(_receiptColumnHeader(chars, fontSize));
           widgets.add(_line(_dash(chars), fontSize));
 
           for (final item in order.items) {
-            final name = _fit(item.name, is58 ? 12 : 20);
-            widgets.add(
-              _fourColumn(
-                name,
-                item.quantity.toString(),
-                _money(item.price),
-                _money(item.total),
-                chars,
-                fontSize,
-              ),
-            );
+            widgets.add(_receiptItemLine(item.name, item.quantity.toString(), _money(item.total), chars, fontSize));
           }
 
           widgets.add(_line(_dash(chars), fontSize));
-          widgets.add(_gap(2));
           widgets.add(_summaryLine('Sub Total', _money(order.subtotal), chars, fontSize));
-
-          if (order.discount > 0) {
-            final pct = discountPercent.round();
-            final label = pct > 0 ? 'Dis: @$pct%' : 'Discount';
-            widgets.add(_summaryLine(label, _money(order.discount), chars, fontSize));
-          }
-
-          widgets.add(_line(_dash(chars), fontSize));
+          widgets.add(_summaryLine('Discount', _money(order.discount), chars, fontSize));
           widgets.add(_summaryLine('Net Total', _money(order.subtotal - order.discount), chars, fontSize));
-
           if (totalTax > 0) {
-            widgets.add(_summaryLine(
-              'CGST @${_rate(halfRate)}%',
-              _money(halfTax),
-              chars,
-              fontSize,
-            ));
-            widgets.add(_summaryLine(
-              'SGST @${_rate(halfRate)}%',
-              _money(halfTax),
-              chars,
-              fontSize,
-            ));
+            widgets.add(_summaryLine('CGST @${_rate(halfRate)}%', _money(halfTax), chars, fontSize));
+            widgets.add(_summaryLine('SGST @${_rate(halfRate)}%', _money(halfTax), chars, fontSize));
           }
-
           widgets.add(_line(_dash(chars), fontSize));
-          widgets.add(_gap(1));
-          widgets.add(_summaryLine('Grand Total', _money(order.grandTotal), chars, fontSize, bold: true, large: true));
-          widgets.add(_line(_dash(chars), fontSize));
-
-          if (settings.gstNumber.trim().isNotEmpty) {
-            widgets.add(
-              _twoColumn(
-                'GST NO ${settings.gstNumber.trim()}',
-                Formatters.time(order.createdAt),
-                chars,
-                smallSize,
-              ),
-            );
-          } else {
-            widgets.add(_line('GST NO: —', smallSize));
+          widgets.add(_summaryLine('TOTAL', _money(order.grandTotal), chars, fontSize, bold: true, large: true));
+          widgets.add(_summaryLine('Payment mode', order.paymentMethod, chars, fontSize));
+                    widgets.add(_line(_dash(chars), fontSize));
+          widgets.add(_center('Thank you!', fontSize + .5, bold: true));
+          if (settings.receiptFooter.trim().isNotEmpty) {
+            for (final line in _wrap(settings.receiptFooter, chars)) {
+              widgets.add(_center(line, smallSize));
+            }
           }
-
-          widgets.add(_gap(3));
-          widgets.add(_center('E.&O.E.       Thank You       Visit Again', smallSize));
-          widgets.add(_gap(2));
-
-          final type = order.orderType == 'dine_in'
-              ? 'Dine In'
-              : order.orderType == 'delivery'
-                  ? 'Delivery'
-                  : 'Take Away';
-          widgets.add(_center(type, fontSize + .5, bold: true));
-
-          widgets.add(_gap(4));
-          widgets.add(_center(settings.receiptFooter.replaceAll('\n', '  '), smallSize));
-          widgets.add(_center('Powered by GoogliXLabs', 5.5));
 
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
@@ -181,7 +111,6 @@ class ReceiptService {
         },
       ),
     );
-
     return doc.save();
   }
 
@@ -248,6 +177,36 @@ class ReceiptService {
       _fit(item, itemWidth).padRight(itemWidth) +
           _fit(qty, qtyWidth).padLeft(qtyWidth) +
           _fit(rate, rateWidth).padLeft(rateWidth) +
+          _fit(amount, amountWidth).padLeft(amountWidth),
+      size,
+    );
+  }
+
+  pw.Widget _receiptColumnHeader(int chars, double size) {
+    final qtyWidth = 5;
+    final amountWidth = 11;
+    final itemWidth = chars - qtyWidth - amountWidth;
+    return _line(
+      _fit('ITEM', itemWidth).padRight(itemWidth) +
+          _fit('QTY', qtyWidth).padLeft(qtyWidth) +
+          _fit('AMT', amountWidth).padLeft(amountWidth),
+      size,
+    );
+  }
+
+  pw.Widget _receiptItemLine(
+    String item,
+    String qty,
+    String amount,
+    int chars,
+    double size,
+  ) {
+    final qtyWidth = 5;
+    final amountWidth = 11;
+    final itemWidth = chars - qtyWidth - amountWidth;
+    return _line(
+      _fit(item, itemWidth).padRight(itemWidth) +
+          _fit(qty, qtyWidth).padLeft(qtyWidth) +
           _fit(amount, amountWidth).padLeft(amountWidth),
       size,
     );
@@ -344,7 +303,7 @@ class ReceiptService {
     // that renegotiation is exactly what caused receipts to print as a
     // small block pinned to the left of an otherwise blank full page.
     // Locking the job to the receipt's real format keeps output filling the
-    // 58mm/80mm roll edge to edge.
+    // 55mm/80mm roll edge to edge.
     await Printing.layoutPdf(
       onLayout: (_) async => bytes,
       format: _receiptFormat(widthMm, order.items.length),
@@ -370,15 +329,19 @@ class ReceiptService {
   ) async {
     final buffer = StringBuffer()
       ..writeln(settings.cafeName)
-      ..writeln('TAX INVOICE')
-      ..writeln('Bill No. : ${order.orderNumber}')
-      ..writeln('Date     : ${Formatters.date(order.createdAt)}')
-      ..writeln('Time     : ${Formatters.time(order.createdAt)}')
+      ..writeln('The food which makes you happy')
+      ..writeln('Phone: ${settings.phone}')
+      ..writeln('Address: ${settings.address}')
+      ..writeln('GST: ${settings.gstNumber}')
+      ..writeln('Order from: ${order.tableName?.trim().isNotEmpty == true ? order.tableName : order.orderType}')
+      ..writeln('Bill #${order.orderNumber}')
+      ..writeln('Date: ${Formatters.date(order.createdAt)}')
+      ..writeln('Time: ${Formatters.time(order.createdAt)}')
       ..writeln('---');
 
     for (final item in order.items) {
       buffer.writeln(
-        '${item.name}  ${item.quantity}  ${_money(item.price)}  ${_money(item.total)}',
+        '${item.name}  ${item.quantity}  ${_money(item.total)}',
       );
     }
 
@@ -386,9 +349,10 @@ class ReceiptService {
       ..writeln('---')
       ..writeln('Sub Total : ${_money(order.subtotal)}')
       ..writeln('Discount  : ${_money(order.discount)}')
-      ..writeln('Tax       : ${_money(order.tax)}')
-      ..writeln('Grand Total: ${_money(order.grandTotal)}')
-      ..writeln('Payment   : ${order.paymentMethod}')
+      ..writeln('CGST      : ${_money(order.tax / 2)}')
+      ..writeln('SGST      : ${_money(order.tax / 2)}')
+      ..writeln('TOTAL     : ${_money(order.grandTotal)}')
+      ..writeln('Payment mode: ${order.paymentMethod}')
       ..writeln(settings.receiptFooter)
       ..writeln('Powered by GoogliXLabs');
 
@@ -413,98 +377,94 @@ class ReceiptService {
     BusinessSettings settings, {
     double widthMm = 80,
   }) async {
-    final is58 = widthMm <= 60;
+    final isNarrow = widthMm <= 60;
     final profile = await CapabilityProfile.load();
-    final generator = Generator(is58 ? PaperSize.mm58 : PaperSize.mm80, profile);
-    final chars = is58 ? 32 : 48;
-    final itemNameWidth = is58 ? 16 : 22;
-
-    final totalTax = order.tax;
-    final halfTax = totalTax / 2;
-    final taxRate = settings.taxEnabled ? settings.taxPercent : 0;
-    final halfRate = taxRate / 2;
-    final discountPercent = order.subtotal > 0 ? (order.discount / order.subtotal) * 100 : 0;
-
-    final cafeName = _fit(settings.cafeName, chars);
-    final tagline = _fit(settings.tagline, chars);
-    final address = _wrap(settings.address, chars);
-    final phone = settings.phone.trim();
-    final billNo = order.orderNumber.toString();
-    final staff = (order.staffName?.trim().isNotEmpty ?? false) ? order.staffName!.trim() : 'COUNTER';
+    // esc_pos_utils_plus exposes 58mm as its narrow ESC/POS profile. We use
+    // the 58mm command profile for 55mm rolls but constrain content to 30
+    // columns so the printed ticket stays compact and readable.
+    final generator = Generator(isNarrow ? PaperSize.mm58 : PaperSize.mm80, profile);
+    final chars = isNarrow ? 30 : 48;
+    final itemWidth = chars - 16;
+    final qtyWidth = 5;
+    final amountWidth = 11;
 
     List<int> bytes = [];
-
-    bytes += generator.text(cafeName, styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
-    if (tagline.isNotEmpty) bytes += generator.text(tagline, styles: const PosStyles(align: PosAlign.center));
-    for (final line in address) {
+    final cafeName = _fit(settings.cafeName, chars);
+    bytes += generator.text(
+      cafeName,
+      styles: const PosStyles(
+        align: PosAlign.center,
+        bold: true,
+        height: PosTextSize.size2,
+        width: PosTextSize.size2,
+      ),
+    );
+    bytes += generator.text('The food which makes you happy', styles: const PosStyles(align: PosAlign.center));
+    if (settings.phone.trim().isNotEmpty) {
+      bytes += generator.text('Phone: ${settings.phone.trim()}', styles: const PosStyles(align: PosAlign.center));
+    }
+    for (final line in _wrap(settings.address, chars)) {
       bytes += generator.text(line, styles: const PosStyles(align: PosAlign.center));
     }
-    if (phone.isNotEmpty) bytes += generator.text('Ph: $phone', styles: const PosStyles(align: PosAlign.center));
-
-    bytes += generator.hr();
-    bytes += generator.text('TAX INVOICE', styles: const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.hr();
-
-    bytes += generator.text(_twoColumnText('Date: ${Formatters.date(order.createdAt)}', 'Bill No. : $billNo', chars));
-    bytes += generator.text('PBoy: $staff');
-    if (order.tableName?.trim().isNotEmpty ?? false) {
-      bytes += generator.text('Table: ${order.tableName!.trim()}');
+    if (settings.gstNumber.trim().isNotEmpty) {
+      bytes += generator.text('GST: ${settings.gstNumber.trim()}', styles: const PosStyles(align: PosAlign.center));
     }
 
     bytes += generator.hr();
-    bytes += generator.text(_threeColumnHeaderText(chars));
+    final orderFrom = order.tableName?.trim().isNotEmpty == true
+        ? 'Table ${order.tableName!.trim()}'
+        : order.orderType == 'delivery'
+            ? 'Delivery'
+            : order.orderType == 'takeaway'
+                ? 'Take Away'
+                : 'Dine In';
+    bytes += generator.text('Order from: $orderFrom');
+    bytes += generator.text(_twoColumnText(
+      '${Formatters.date(order.createdAt)} ${Formatters.time(order.createdAt)}',
+      'Bill #${order.orderNumber}',
+      chars,
+    ));
+    if (order.tableCustomerLabel?.trim().isNotEmpty == true) {
+      bytes += generator.text('Customer: ${_fit(order.tableCustomerLabel!.trim(), chars)}');
+    }
+    bytes += generator.hr();
+
+    final header = _fit('ITEM', itemWidth).padRight(itemWidth) +
+        _fit('QTY', qtyWidth).padLeft(qtyWidth) +
+        _fit('AMT', amountWidth).padLeft(amountWidth);
+    bytes += generator.text(header);
     bytes += generator.hr();
 
     for (final item in order.items) {
-      final name = _fit(item.name, itemNameWidth);
-      bytes += generator.text(_fourColumnText(name, item.quantity.toString(), _money(item.price), _money(item.total), chars));
+      final line = _fit(item.name, itemWidth).padRight(itemWidth) +
+          _fit(item.quantity.toString(), qtyWidth).padLeft(qtyWidth) +
+          _fit(_money(item.total), amountWidth).padLeft(amountWidth);
+      bytes += generator.text(line);
     }
 
     bytes += generator.hr();
     bytes += generator.text(_summaryLineText('Sub Total', _money(order.subtotal), chars));
-
-    if (order.discount > 0) {
-      final pct = discountPercent.round();
-      final label = pct > 0 ? 'Dis: @$pct%' : 'Discount';
-      bytes += generator.text(_summaryLineText(label, _money(order.discount), chars));
-    }
-
-    bytes += generator.hr();
+    bytes += generator.text(_summaryLineText('Discount', _money(order.discount), chars));
     bytes += generator.text(_summaryLineText('Net Total', _money(order.subtotal - order.discount), chars));
-
-    if (totalTax > 0) {
+    if (order.tax > 0) {
+      final halfTax = order.tax / 2;
+      final halfRate = (settings.taxEnabled ? settings.taxPercent : 0) / 2;
       bytes += generator.text(_summaryLineText('CGST @${_rate(halfRate)}%', _money(halfTax), chars));
       bytes += generator.text(_summaryLineText('SGST @${_rate(halfRate)}%', _money(halfTax), chars));
     }
-
     bytes += generator.hr();
-    bytes += generator.text(_summaryLineText('Grand Total', _money(order.grandTotal), chars), styles: const PosStyles(bold: true));
+    bytes += generator.text(
+      _summaryLineText('TOTAL', _money(order.grandTotal), chars),
+      styles: const PosStyles(bold: true),
+    );
+    bytes += generator.text(_summaryLineText('Payment mode', order.paymentMethod, chars));
     bytes += generator.hr();
-
-    if (settings.gstNumber.trim().isNotEmpty) {
-      bytes += generator.text(_twoColumnText('GST NO ${settings.gstNumber.trim()}', Formatters.time(order.createdAt), chars));
-    } else {
-      bytes += generator.text('GST NO: -');
+    bytes += generator.text('Thank you!', styles: const PosStyles(align: PosAlign.center, bold: true));
+    for (final line in _wrap(settings.receiptFooter, chars)) {
+      bytes += generator.text(line, styles: const PosStyles(align: PosAlign.center));
     }
-
-    bytes += generator.text('Payment: ${order.paymentMethod}');
     bytes += generator.feed(1);
-    bytes += generator.text('E.&O.E.  Thank You  Visit Again', styles: const PosStyles(align: PosAlign.center));
-
-    final type = order.orderType == 'dine_in' ? 'Dine In' : order.orderType == 'delivery' ? 'Delivery' : 'Take Away';
-    bytes += generator.text(type, styles: const PosStyles(align: PosAlign.center, bold: true));
-
-    bytes += generator.feed(1);
-    if (settings.receiptFooter.trim().isNotEmpty) {
-      for (final line in _wrap(settings.receiptFooter, chars)) {
-        bytes += generator.text(line, styles: const PosStyles(align: PosAlign.center));
-      }
-    }
-    bytes += generator.text('Powered by GoogliXLabs', styles: const PosStyles(align: PosAlign.center));
-
-    bytes += generator.feed(3);
     bytes += generator.cut();
-
     return bytes;
   }
 

@@ -5,7 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../services/bluetooth_printer_service.dart';
 
 /// Lets staff pick, connect to, and test the café's Bluetooth thermal
-/// receipt printer (58mm/80mm roll) — the printer used at the billing
+/// receipt printer (55mm/80mm roll) — the printer used at the billing
 /// counter. This does not touch the A4/PDF "Share as PDF" option, which
 /// remains available separately for emailing/WhatsApp-ing a bill copy.
 class PrinterSettingsScreen extends StatefulWidget {
@@ -44,7 +44,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
-    _widthMm = prefs.getDouble(_prefsWidthKey) ?? 80;
+    _widthMm = prefs.getDouble(_prefsWidthKey) ?? 55;
     // Permissions must be granted BEFORE we ask the OS for Bluetooth
     // adapter/connection state. On Android 12+ the service requests only
     // Nearby Devices (SCAN/CONNECT), avoiding false denials from legacy
@@ -136,14 +136,14 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     }
     setState(() => _busy = true);
     try {
-      final is58 = _widthMm <= 60;
-      final chars = is58 ? 32 : 48;
+      final isNarrow = _widthMm <= 60;
+      final chars = isNarrow ? 30 : 48;
       final dash = List.filled(chars, '-').join();
       final lines = <int>[
         ...'Fast N Fresh Cafe\n'.codeUnits,
         ...'TEST PRINT\n'.codeUnits,
         ...'$dash\n'.codeUnits,
-        ...'Paper: ${is58 ? '58mm' : '80mm'}\n'.codeUnits,
+        ...'Paper: ${isNarrow ? '55mm' : '80mm'}\n'.codeUnits,
         ...'Printer: ${_service.connectedName ?? '-'}\n'.codeUnits,
         ...'$dash\n\n\n'.codeUnits,
       ];
@@ -199,9 +199,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
               children: [
                 Expanded(
                   child: ChoiceChip(
-                    label: const Text('58 mm'),
+                    label: const Text('55 mm'),
                     selected: _widthMm <= 60,
-                    onSelected: (_) => _setWidth(58),
+                    onSelected: (_) => _setWidth(55),
                   ),
                 ),
                 const SizedBox(width: 10),

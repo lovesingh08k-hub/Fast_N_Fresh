@@ -66,6 +66,7 @@ class Order {
   final List<OrderItem> items;
   final double subtotal;
   final double discount;
+  final double loyaltyPointsUsed;
   final double tax;
   final double grandTotal;
   final String orderType; // dine_in | takeaway | delivery
@@ -96,6 +97,7 @@ class Order {
     required this.items,
     required this.subtotal,
     required this.discount,
+    this.loyaltyPointsUsed = 0,
     required this.tax,
     required this.grandTotal,
     this.orderType = 'takeaway',
@@ -132,6 +134,7 @@ class Order {
       items: (json['items'] as List<dynamic>? ?? []).map((e) => OrderItem.fromJson(e as Map<String, dynamic>)).toList(),
       subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
       discount: (json['discount'] as num?)?.toDouble() ?? 0,
+      loyaltyPointsUsed: (json['loyaltyPointsUsed'] as num?)?.toDouble() ?? 0,
       tax: (json['tax'] as num?)?.toDouble() ?? 0,
       grandTotal: (json['grandTotal'] as num?)?.toDouble() ?? 0,
       orderType: json['orderType'] as String? ?? 'takeaway',

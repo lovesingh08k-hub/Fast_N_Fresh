@@ -117,7 +117,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> with WidgetsBindi
     setState(() => _busy = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final widthMm = prefs.getDouble('thermal_printer_width_mm') ?? 80;
+      final widthMm = prefs.getDouble('thermal_printer_width_mm') ?? 55;
       final ok = await _receiptService.printViaBluetooth(order, _settings, widthMm: widthMm);
       if (!mounted) return;
       if (!ok) {

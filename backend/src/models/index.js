@@ -4,6 +4,7 @@ module.exports = {
   Category: require('./Category'),
   Product: require('./Product'),
   Order: require('./Order'),
+  PaymentTransaction: require('./PaymentTransaction'),
   Counter: require('./Counter'),
   CreditTransaction: require('./CreditTransaction'),
   InventoryTransaction: require('./InventoryTransaction'),

@@ -124,92 +124,25 @@
 
   </section>
 
-  <!-- UPI payment pending screen: shown after an order is created for UPI
-       payment. The order already exists in the cafe's system (staff can see
-       it), but it is NOT marked paid yet — only a human at the counter can
-       do that after verifying the payment actually arrived. -->
+  <!-- Online payment processing screen. A final Order is created only after
+       the backend has server-verified the payment provider transaction. -->
   <section id="upiPendingState" class="full-page-state hidden">
-
     <div class="state-icon pending-icon">₹</div>
-
-    <div class="success-label" id="upiPendingLabel">
-      PAYMENT PENDING
-    </div>
-
-    <h2 id="upiPendingHeading">Complete your UPI payment</h2>
-
+    <div class="success-label" id="upiPendingLabel">PAYMENT PROCESSING</div>
+    <h2 id="upiPendingHeading">Complete your online payment</h2>
     <p id="upiPendingSubtext">
-      Pay using any UPI app, then enter the reference number (UTR) below.
-      Your order is already placed — staff will confirm your payment.
+      Complete the payment in your payment app. We will confirm it automatically
+      after the payment provider verifies the transaction.
     </p>
-
     <div class="success-card">
-
-      <div class="success-row">
-        <span>Table</span>
-        <strong id="upiPendingTable">—</strong>
-      </div>
-
-      <div class="success-row">
-        <span>Order number</span>
-        <strong id="upiPendingOrderNumber">—</strong>
-      </div>
-
-      <div class="success-row">
-        <span>Amount to pay</span>
-        <strong id="upiPendingTotal">—</strong>
-      </div>
-
+      <div class="success-row"><span>Table</span><strong id="upiPendingTable">—</strong></div>
+      <div class="success-row"><span>Payment</span><strong id="upiPendingOrderNumber">—</strong></div>
+      <div class="success-row"><span>Amount</span><strong id="upiPendingTotal">—</strong></div>
+      <div class="success-row"><span>Status</span><strong id="upiPendingStatusText">Payment processing...</strong></div>
     </div>
-
-    <button
-      id="upiReopenBtn"
-      class="secondary-btn upi-pay-btn"
-      type="button"
-    >
-      Open UPI App Again
-    </button>
-
-    <div class="field-group upi-pending-field-group">
-      <label class="field-label" for="upiPendingReferenceInput">UPI Reference / UTR</label>
-      <input
-        class="field-input"
-        id="upiPendingReferenceInput"
-        type="text"
-        maxlength="100"
-        placeholder="e.g. 123456789012"
-        autocomplete="off"
-      />
-      <div class="field-help">Find this in your UPI app's payment history / SMS after a successful payment.</div>
-    </div>
-
+    <button id="upiReopenBtn" class="secondary-btn upi-pay-btn" type="button">Open Payment Again</button>
     <div id="upiPendingError" class="error-banner hidden"></div>
-
-    <button
-      id="upiSubmitReferenceBtn"
-      class="primary-btn"
-      type="button"
-    >
-      I've Paid — Submit Reference
-    </button>
-
-    <div id="upiPendingStatusCard" class="order-status-card status-open hidden">
-      <div class="order-status-dot"></div>
-      <div>
-        <div class="order-status-kicker">PAYMENT VERIFICATION</div>
-        <div id="upiPendingStatusText" class="order-status-text">Waiting for staff to confirm your payment</div>
-        <div class="order-status-help">This updates automatically. Please keep this page open or check back.</div>
-      </div>
-    </div>
-
-    <button
-      id="upiCancelBtn"
-      class="text-btn danger-text-btn"
-      type="button"
-    >
-      Cancel this order
-    </button>
-
+    <button id="upiCancelBtn" class="secondary-btn" type="button">Cancel Payment</button>
   </section>
 
   <!-- Main menu -->
@@ -481,7 +414,7 @@
               PAY WITH UPI
             </button>
             <div class="field-help upi-help-text" id="upiHelpText" style="display:none;">
-              Your order will be placed and you'll be taken to your UPI app to pay. You'll enter the payment reference (UTR) after paying.
+              You will complete payment with the configured payment provider. Your order is created only after the payment is verified.
             </div>
           </div>
 

@@ -62,6 +62,7 @@ const orderSchema = new mongoose.Schema(
 
     subtotal: { type: Number, required: true, min: 0, default: 0 },
     discount: { type: Number, default: 0, min: 0 },
+    loyaltyPointsUsed: { type: Number, default: 0, min: 0 },
     tax: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0, default: 0 },
 

@@ -9,6 +9,7 @@
     "seed": "node src/utils/seed.js",
     "seed:menu": "node src/utils/seedMenuFromPdf.js",
     "migrate:table-numbers": "node src/utils/migrateTableNumbers.js",
+    "migrate:breakfast-biryani": "node src/utils/migrateBreakfastBiryani.js",
     "check": "node scripts/check-syntax.js"
   },
   "dependencies": {

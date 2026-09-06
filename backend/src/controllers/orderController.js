@@ -735,11 +735,24 @@ const checkoutOrder =
       discount,
     } = req.body;
 
-    if (paymentMethod === 'MIXED' && Number(upiPortion) > 0 && (!upiReference || !String(upiReference).trim())) {
+    // Existing staff UPI/MIXED checkout keeps its current UTR requirement.
+    // The only exception is an already server-verified QR payment: that order
+    // is already paid and must not be charged/verified a second time at the
+    // counter.
+    const qrOrder = await Order.findById(req.params.id).select('orderSource paymentStatus');
+    const isAlreadyVerifiedQrPayment =
+      qrOrder?.orderSource === 'qr' && qrOrder?.paymentStatus === 'paid';
+
+    if (!isAlreadyVerifiedQrPayment &&
+        paymentMethod === 'MIXED' &&
+        Number(upiPortion) > 0 &&
+        (!upiReference || !String(upiReference).trim())) {
       throw new ApiError(400, 'UPI reference / UTR is required for the UPI portion.');
     }
 
-    if (paymentMethod === 'UPI' && (!upiReference || !String(upiReference).trim())) {
+    if (!isAlreadyVerifiedQrPayment &&
+        paymentMethod === 'UPI' &&
+        (!upiReference || !String(upiReference).trim())) {
       throw new ApiError(400, 'UPI reference / UTR is required before marking payment paid.');
     }
 

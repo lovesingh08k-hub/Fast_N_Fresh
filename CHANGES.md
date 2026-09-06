@@ -42,3 +42,21 @@ flutter build apk --release
 ```
 
 For the release build, use the real production keystore.
+
+## 2026-09-06 — KOT, Receipt, QR Payment Safety, Breakfast/Biryani
+
+- Added a KOT preview/printing path alongside the existing Kitchen Display System.
+- Updated receipt PDF, Bluetooth thermal ticket, and text sharing to the requested compact cafe-bill structure, using existing BusinessSettings and Order data.
+- Added `loyaltyPointsUsed` to Order with a backward-compatible default of 0.
+- Removed customer-facing UTR/reference entry and the old public UTR endpoint.
+- Split customer online payment attempts into `PaymentTransaction`; final Orders are created only after server-verifiable provider success.
+- Added a provider abstraction and fail-closed webhook/status architecture. No PSP credentials/provider adapter are present in this repository, so customer online payment remains unavailable until a real provider is configured.
+- Added an idempotent Breakfast/Biryani migration that moves existing products without changing their inventory/cost fields and creates only missing products.
+- Kept `web/menu/` untouched because `backend/public/menu/` is the served `/menu` implementation.
+
+
+### Printer width / paper saving
+- Added a 55 mm thermal-printer option alongside 80 mm.
+- Narrow receipts use a compact 30-column layout and only one feed line before cutting to reduce paper waste.
+- KOT printing follows the same saved printer-width preference.
+- Receipt header includes the cafe slogan and loyalty-points line remains removed.
