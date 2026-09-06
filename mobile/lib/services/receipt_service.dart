@@ -33,8 +33,8 @@ class ReceiptService {
     final doc = pw.Document();
     final isNarrow = widthMm <= 60;
     final chars = isNarrow ? 30 : 42;
-    final fontSize = is58 ? 7.2 : 8.2;
-    final smallSize = is58 ? 6.4 : 7.2;
+    final fontSize = 7.2;
+    final smallSize = 6.4;
     final format = _receiptFormat(widthMm, order.items.length);
 
     final totalTax = order.tax;
@@ -276,7 +276,7 @@ class ReceiptService {
   PdfPageFormat _receiptFormat(double widthMm, int itemCount) {
     final pageWidth = widthMm * PdfPageFormat.mm;
     final is58 = widthMm <= 60;
-    final fontSize = is58 ? 7.2 : 8.2;
+    final fontSize = 7.2;
     final lineCount = 24 + itemCount * 2;
     final estimatedHeight = (lineCount * (fontSize + 2.5) + 70).clamp(180, 500).toDouble() * PdfPageFormat.mm;
     return PdfPageFormat(

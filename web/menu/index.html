@@ -30,17 +30,21 @@
     <div class="spinner"></div>
     <h2>Loading menu</h2>
     <p>Please wait a moment...</p>
+
     <p id="loadingSlowHint" class="loading-slow-hint hidden">
       Still waking up our kitchen server — thanks for your patience!
     </p>
+
     <div class="loading-credit">
       <span class="loading-credit-mark">G</span>
       Developed by GoogliXLabs
     </div>
   </section>
 
+
   <!-- Error screen -->
   <section id="errorState" class="full-page-state hidden">
+
     <div class="state-icon error-icon">!</div>
 
     <h2 id="errorTitle">Something went wrong</h2>
@@ -56,7 +60,9 @@
     >
       Try Again
     </button>
+
   </section>
+
 
   <!-- Order success screen -->
   <section id="successState" class="full-page-state hidden">
@@ -67,7 +73,9 @@
       ORDER CONFIRMED
     </div>
 
-    <h2 id="successHeading">Order placed!</h2>
+    <h2 id="successHeading">
+      Order placed!
+    </h2>
 
     <p id="successSubtext">
       Your order has been sent to the cafe.
@@ -92,27 +100,87 @@
 
     </div>
 
-    <div class="success-items-heading">Items you ordered</div>
-    <div id="successItems" class="success-items"></div>
 
-    <div id="successStatus" class="order-status-card status-open">
+    <div class="success-items-heading">
+      Items you ordered
+    </div>
+
+    <div
+      id="successItems"
+      class="success-items"
+    ></div>
+
+
+    <div
+      id="successStatus"
+      class="order-status-card status-open"
+    >
+
       <div class="order-status-dot"></div>
+
       <div>
-        <div class="order-status-kicker">LIVE ORDER STATUS</div>
-        <div id="successStatusText" class="order-status-text">Order received</div>
-        <div class="order-status-help">This updates automatically while the cafe prepares your order.</div>
+
+        <div class="order-status-kicker">
+          LIVE ORDER STATUS
+        </div>
+
+        <div
+          id="successStatusText"
+          class="order-status-text"
+        >
+          Order received
+        </div>
+
+        <div class="order-status-help">
+          This updates automatically while the cafe prepares your order.
+        </div>
+
       </div>
+
     </div>
 
-    <div id="feedbackBox" class="feedback-box hidden">
-      <div class="feedback-title">How was your experience?</div>
-      <div class="stars" id="feedbackStars">
-        <button type="button" data-rating="1">★</button><button type="button" data-rating="2">★</button><button type="button" data-rating="3">★</button><button type="button" data-rating="4">★</button><button type="button" data-rating="5">★</button>
+
+    <div
+      id="feedbackBox"
+      class="feedback-box hidden"
+    >
+
+      <div class="feedback-title">
+        How was your experience?
       </div>
-      <textarea id="feedbackComment" maxlength="500" placeholder="Optional feedback"></textarea>
-      <button id="submitFeedbackBtn" class="secondary-btn" type="button">Send Feedback</button>
-      <div id="feedbackMessage" class="feedback-message"></div>
+
+      <div
+        class="stars"
+        id="feedbackStars"
+      >
+        <button type="button" data-rating="1">★</button>
+        <button type="button" data-rating="2">★</button>
+        <button type="button" data-rating="3">★</button>
+        <button type="button" data-rating="4">★</button>
+        <button type="button" data-rating="5">★</button>
+      </div>
+
+      <textarea
+        id="feedbackComment"
+        maxlength="500"
+        placeholder="Optional feedback"
+      ></textarea>
+
+      <button
+        id="submitFeedbackBtn"
+        class="secondary-btn"
+        type="button"
+      >
+        Send Feedback
+      </button>
+
+      <div
+        id="feedbackMessage"
+        class="feedback-message"
+      ></div>
+
     </div>
+
 
     <button
       id="doneBtn"
@@ -124,24 +192,43 @@
 
   </section>
 
-  <!-- UPI payment pending screen: shown after an order is created for UPI
-       payment. The order already exists in the cafe's system (staff can see
-       it), but it is NOT marked paid yet — only a human at the counter can
-       do that after verifying the payment actually arrived. -->
-  <section id="upiPendingState" class="full-page-state hidden">
 
-    <div class="state-icon pending-icon">₹</div>
+  <!--
+    Online payment state.
 
-    <div class="success-label" id="upiPendingLabel">
+    This screen is only used for a payment transaction that is handled
+    through the configured payment gateway and verified by the server.
+
+    Payments are verified securely through the payment gateway.
+  -->
+  <section
+    id="upiPendingState"
+    class="full-page-state hidden"
+  >
+
+    <div class="state-icon pending-icon">
+      ₹
+    </div>
+
+
+    <div
+      class="success-label"
+      id="upiPendingLabel"
+    >
       PAYMENT PENDING
     </div>
 
-    <h2 id="upiPendingHeading">Complete your UPI payment</h2>
+
+    <h2 id="upiPendingHeading">
+      Complete your online payment
+    </h2>
+
 
     <p id="upiPendingSubtext">
-      Pay using any UPI app, then enter the reference number (UTR) below.
-      Your order is already placed — staff will confirm your payment.
+      Complete your payment securely through the payment gateway.
+      Your payment status will be verified automatically by the server.
     </p>
+
 
     <div class="success-card">
 
@@ -162,58 +249,67 @@
 
     </div>
 
+
     <button
       id="upiReopenBtn"
       class="secondary-btn upi-pay-btn"
       type="button"
     >
-      Open UPI App Again
+      Continue Payment
     </button>
 
-    <div class="field-group upi-pending-field-group">
-      <label class="field-label" for="upiPendingReferenceInput">UPI Reference / UTR</label>
-      <input
-        class="field-input"
-        id="upiPendingReferenceInput"
-        type="text"
-        maxlength="100"
-        placeholder="e.g. 123456789012"
-        autocomplete="off"
-      />
-      <div class="field-help">Find this in your UPI app's payment history / SMS after a successful payment.</div>
-    </div>
 
-    <div id="upiPendingError" class="error-banner hidden"></div>
+    <div
+      id="upiPendingError"
+      class="error-banner hidden"
+    ></div>
 
-    <button
-      id="upiSubmitReferenceBtn"
-      class="primary-btn"
-      type="button"
+
+    <div
+      id="upiPendingStatusCard"
+      class="order-status-card status-open hidden"
     >
-      I've Paid — Submit Reference
-    </button>
 
-    <div id="upiPendingStatusCard" class="order-status-card status-open hidden">
       <div class="order-status-dot"></div>
+
       <div>
-        <div class="order-status-kicker">PAYMENT VERIFICATION</div>
-        <div id="upiPendingStatusText" class="order-status-text">Waiting for staff to confirm your payment</div>
-        <div class="order-status-help">This updates automatically. Please keep this page open or check back.</div>
+
+        <div class="order-status-kicker">
+          PAYMENT VERIFICATION
+        </div>
+
+        <div
+          id="upiPendingStatusText"
+          class="order-status-text"
+        >
+          Waiting for payment verification
+        </div>
+
+        <div class="order-status-help">
+          Your payment status is checked automatically by the server.
+        </div>
+
       </div>
+
     </div>
+
 
     <button
       id="upiCancelBtn"
       class="text-btn danger-text-btn"
       type="button"
     >
-      Cancel this order
+      Cancel this payment
     </button>
 
   </section>
 
+
   <!-- Main menu -->
-  <div id="app" class="hidden">
+  <div
+    id="app"
+    class="hidden"
+  >
 
     <!-- Header -->
     <header class="header">
@@ -223,14 +319,29 @@
         <div class="brand-area">
 
           <div class="brand-lockup">
-            <img class="brand-logo" src="assets/fnf-logo.png" alt="Fast N Fresh Cafe" />
+
+            <img
+              class="brand-logo"
+              src="assets/fnf-logo.png"
+              alt="Fast N Fresh Cafe"
+            />
+
             <div>
-              <div class="brand">FAST N FRESH</div>
-              <div class="brand-subtitle">CAFE • FRESH FOOD & FAST SERVICE</div>
+
+              <div class="brand">
+                FAST N FRESH
+              </div>
+
+              <div class="brand-subtitle">
+                CAFE • FRESH FOOD & FAST SERVICE
+              </div>
+
             </div>
+
           </div>
 
         </div>
+
 
         <div
           class="table-badge"
@@ -241,10 +352,13 @@
 
       </div>
 
+
       <!-- Search -->
       <div class="search-box">
 
-        <span class="search-icon">⌕</span>
+        <span class="search-icon">
+          ⌕
+        </span>
 
         <input
           id="searchInput"
@@ -265,6 +379,7 @@
 
       </div>
 
+
       <!-- Categories -->
       <div
         class="categories"
@@ -273,20 +388,27 @@
 
     </header>
 
+
     <!-- Menu -->
     <main
       class="product-list"
       id="productList"
     ></main>
 
+
     <!-- Empty search result -->
     <div
       id="searchEmpty"
       class="search-empty hidden"
     >
-      <div class="empty-icon">⌕</div>
 
-      <h3>No food found</h3>
+      <div class="empty-icon">
+        ⌕
+      </div>
+
+      <h3>
+        No food found
+      </h3>
 
       <p>
         Try searching for something else.
@@ -299,7 +421,9 @@
       >
         Clear Search
       </button>
+
     </div>
+
 
     <!-- Sticky cart -->
     <button
@@ -315,6 +439,7 @@
         </div>
 
         <div>
+
           <div class="cart-bar-title">
             View Cart
           </div>
@@ -325,9 +450,11 @@
           >
             0 items
           </div>
+
         </div>
 
       </div>
+
 
       <div class="cart-bar-right">
 
@@ -345,6 +472,7 @@
 
   </div>
 
+
   <!-- Cart overlay -->
   <div
     class="overlay hidden"
@@ -355,6 +483,7 @@
   >
 
     <div class="sheet">
+
 
       <!-- Cart header -->
       <div class="sheet-header">
@@ -374,6 +503,7 @@
 
         </div>
 
+
         <button
           class="close-btn"
           id="closeCart"
@@ -385,25 +515,43 @@
 
       </div>
 
+
       <!-- Cart content -->
       <div class="sheet-body">
 
         <div id="cartLines"></div>
 
+
         <!-- Total -->
         <div class="summary">
 
           <div class="summary-row">
-            <span>Items</span>
-            <span id="cartItemCount">0</span>
+
+            <span>
+              Items
+            </span>
+
+            <span id="cartItemCount">
+              0
+            </span>
+
           </div>
 
+
           <div class="summary-row total">
-            <span>Total</span>
-            <span id="cartTotal">₹0</span>
+
+            <span>
+              Total
+            </span>
+
+            <span id="cartTotal">
+              ₹0
+            </span>
+
           </div>
 
         </div>
+
 
         <!-- Customer details -->
         <div class="checkout-section">
@@ -416,17 +564,27 @@
             Add your name so the staff can identify your order.
           </div>
 
+
           <div class="field-group">
 
-            <div class="field-label">Customer details <span class="optional">(name or phone required)</span></div>
+            <div class="field-label">
+              Customer details
+              <span class="optional">
+                (name or phone required)
+              </span>
+            </div>
+
 
             <label
               class="field-label"
               for="customerName"
             >
               Your name
-              <span class="required">*</span>
+              <span class="required">
+                *
+              </span>
             </label>
+
 
             <input
               class="field-input"
@@ -439,6 +597,7 @@
 
           </div>
 
+
           <div class="field-group">
 
             <label
@@ -446,8 +605,11 @@
               for="customerPhone"
             >
               Phone number
-              <span class="optional">(optional)</span>
+              <span class="optional">
+                (optional)
+              </span>
             </label>
+
 
             <input
               class="field-input"
@@ -461,15 +623,61 @@
 
           </div>
 
+
+          <!-- Payment -->
           <div class="field-group payment-method-section">
-            <div class="field-label">Payment</div>
+
+            <div class="field-label">
+              Payment
+            </div>
+
+
             <label class="payment-option">
-              <input type="radio" name="paymentMethod" value="counter" checked />
-              <span><strong>Pay at Counter</strong><small>Pay when you collect your order.</small></span>
+
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="counter"
+                checked
+              />
+
+              <span>
+                <strong>
+                  Pay at Counter
+                </strong>
+
+                <small>
+                  Pay when you collect your order.
+                </small>
+              </span>
+
             </label>
-            <label class="payment-option" id="onlinePaymentOption" style="display:none;">
-              <input type="radio" name="paymentMethod" value="upi" />
-              <span><strong>Pay Online via UPI</strong><small>Pay securely using your UPI app.</small></span>
+
+
+            <label
+              class="payment-option"
+              id="onlinePaymentOption"
+              style="display:none;"
+            >
+
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="upi"
+              />
+
+              <span>
+
+                <strong>
+                  Pay Online via UPI
+                </strong>
+
+                <small>
+                  Pay securely through the payment gateway.
+                </small>
+
+              </span>
+
             </label>
 
 
@@ -480,11 +688,21 @@
             >
               PAY WITH UPI
             </button>
-            <div class="field-help upi-help-text" id="upiHelpText" style="display:none;">
-              Your order will be placed and you'll be taken to your UPI app to pay. You'll enter the payment reference (UTR) after paying.
+
+
+            <div
+              class="field-help upi-help-text"
+              id="upiHelpText"
+              style="display:none;"
+            >
+              You will be redirected to the secure payment gateway.
+              Your payment will be verified automatically by the server.
             </div>
+
           </div>
 
+
+          <!-- Special instructions -->
           <div class="field-group">
 
             <label
@@ -492,8 +710,11 @@
               for="orderNote"
             >
               Special instructions
-              <span class="optional">(optional)</span>
+              <span class="optional">
+                (optional)
+              </span>
             </label>
+
 
             <textarea
               class="field-textarea"
@@ -506,11 +727,13 @@
 
         </div>
 
+
         <!-- Checkout error -->
         <div
           id="checkoutError"
           class="error-banner hidden"
         ></div>
+
 
         <!-- Place order -->
         <button
@@ -521,6 +744,7 @@
           Place Order
         </button>
 
+
         <div class="secure-note">
           Your order will be sent directly to the cafe.
         </div>
@@ -530,6 +754,7 @@
     </div>
 
   </div>
+
 
   <script src="config.js?v=20260905"></script>
   <script src="app.js?v=20260905"></script>
