@@ -882,9 +882,14 @@ textarea:focus-visible {
 
 .checkout-section {
   margin-top: 22px;
-  padding-top: 20px;
+  padding: 18px 16px 20px;
 
-  border-top: 1px solid var(--divider);
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+
+  box-shadow: var(--shadow-small);
 }
 
 .section-title {
@@ -969,6 +974,15 @@ textarea:focus-visible {
 .field-input::placeholder,
 .field-textarea::placeholder {
   color: var(--text-muted);
+}
+
+.field-help {
+  margin-top: 7px;
+
+  color: var(--text-secondary);
+
+  font-size: 11.5px;
+  line-height: 1.45;
 }
 
 /* =========================================================
@@ -1569,16 +1583,78 @@ textarea:focus-visible {
 }
 .feedback-box{margin:16px 0;padding:16px;border:1px solid var(--border,#e5e7eb);border-radius:14px;background:#fff}.feedback-title{font-weight:800;margin-bottom:8px}.stars{display:flex;gap:4px;margin-bottom:10px}.stars button{border:0;background:transparent;font-size:28px;opacity:.35;cursor:pointer}.stars button.selected{opacity:1}.feedback-box textarea{width:100%;min-height:70px;resize:vertical;border:1px solid #ddd;border-radius:10px;padding:10px;margin-bottom:10px;box-sizing:border-box}.feedback-message{margin-top:8px;font-size:13px}
 /* Payment method choices */
-.payment-method-section { gap: 10px; }
+.payment-method-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .payment-option {
   display: flex;
   align-items: center;
   gap: 12px;
+
   padding: 13px 14px;
-  border: 1px solid rgba(0,0,0,.10);
-  border-radius: 12px;
+
+  background: var(--background);
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+
   cursor: pointer;
+
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
-.payment-option input { width: 18px; height: 18px; }
-.payment-option span { display:flex; flex-direction:column; gap:3px; }
-.payment-option small { opacity:.68; }
+
+.payment-option:hover {
+  border-color: rgba(14, 124, 90, 0.35);
+}
+
+.payment-option:has(input:checked) {
+  background: var(--primary-light);
+  border-color: var(--primary);
+}
+
+.payment-option input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+
+  accent-color: var(--primary);
+}
+
+.payment-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.payment-option strong {
+  color: var(--text-primary);
+
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.payment-option small {
+  color: var(--text-secondary);
+
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.payment-option:has(input:checked) strong {
+  color: var(--primary-dark);
+}
+
+.upi-help-text {
+  padding: 10px 12px;
+
+  background: var(--primary-light);
+  color: var(--primary-dark);
+
+  border: 1px solid rgba(14, 124, 90, 0.15);
+  border-radius: var(--radius-small);
+}
