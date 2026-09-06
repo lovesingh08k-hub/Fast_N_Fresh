@@ -31,14 +31,32 @@ class AppUser {
   bool get canViewDashboard => isAdmin || isManager;
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
+    // Mongo/Mongoose normally serializes _id as a string, but accepting an
+    // ObjectId-like value here makes login/session restore resilient to older
+    // or differently serialized API responses instead of throwing a type
+    // error that gets surfaced as a generic login failure.
+    final rawId = json['_id'] ?? json['id'];
+    final id = rawId == null ? '' : rawId.toString();
+    if (id.isEmpty) {
+      throw const FormatException('Login response did not contain a user id.');
+    }
+
+    final rawLastLogin = json['lastLoginAt'];
+    DateTime? lastLoginAt;
+    if (rawLastLogin is String) {
+      lastLoginAt = DateTime.tryParse(rawLastLogin);
+    } else if (rawLastLogin != null) {
+      lastLoginAt = DateTime.tryParse(rawLastLogin.toString());
+    }
+
     return AppUser(
-      id: json['_id'] as String,
-      name: json['name'] as String? ?? '',
-      username: json['username'] as String? ?? '',
-      phone: json['phone'] as String? ?? '',
-      role: json['role'] as String? ?? 'staff',
-      status: json['status'] as String? ?? 'active',
-      lastLoginAt: json['lastLoginAt'] != null ? DateTime.tryParse(json['lastLoginAt']) : null,
+      id: id,
+      name: json['name']?.toString() ?? '',
+      username: json['username']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      role: json['role']?.toString() ?? 'staff',
+      status: json['status']?.toString() ?? 'active',
+      lastLoginAt: lastLoginAt,
     );
   }
 

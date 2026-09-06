@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -25,13 +23,11 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
   final _categoryService = CategoryService();
   final _searchController = TextEditingController();
 
+  List<Product> _allProducts = [];
   List<Product> _products = [];
   List<Category> _categories = [];
   bool _loading = true;
-  bool _searching = false;
   String? _error;
-  Timer? _searchDebounce;
-  int _searchGeneration = 0;
 
   AppLifecycleState? _lastLifecycleState;
   ConnectivityProvider? _connectivity;
@@ -61,7 +57,6 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connectivity?.removeListener(_handleConnectivityChange);
-    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -91,60 +86,64 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
     _wasOnline = isOnline;
   }
 
-  Future<void> _load({bool searchOnly = false}) async {
-    final generation = ++_searchGeneration;
-    final query = _searchController.text.trim();
-
+  Future<void> _load() async {
     if (mounted) {
       setState(() {
         _error = null;
-        if (searchOnly && _products.isNotEmpty) {
-          _searching = true;
-        } else {
-          _loading = true;
-        }
+        _loading = true;
       });
     }
 
     try {
-      final productFuture = _productService.list(search: query);
-      final results = searchOnly
-          ? <dynamic>[await productFuture, _categories]
-          : await Future.wait([productFuture, _categoryService.list()]);
+      // Load the catalog once. Product search is intentionally local and
+      // instant after loading: it avoids a network request for every query,
+      // works during Render cold-start/reconnect periods, and searches both
+      // product names and populated category names consistently.
+      final results = await Future.wait([
+        _productService.list(),
+        _categoryService.list(),
+      ]);
 
-      if (!mounted || generation != _searchGeneration) return;
+      if (!mounted) return;
       setState(() {
-        _products = results[0] as List<Product>;
-        if (!searchOnly) _categories = results[1] as List<Category>;
+        _allProducts = results[0] as List<Product>;
+        _categories = results[1] as List<Category>;
+        _applySearch();
       });
     } on ApiException catch (e) {
-      if (!mounted || generation != _searchGeneration) return;
+      if (!mounted) return;
       setState(() => _error = e.message);
     } catch (_) {
-      if (!mounted || generation != _searchGeneration) return;
+      if (!mounted) return;
       setState(() => _error = 'Could not load products.');
     } finally {
-      if (mounted && generation == _searchGeneration) {
-        setState(() {
-          _loading = false;
-          _searching = false;
-        });
+      if (mounted) {
+        setState(() => _loading = false);
       }
     }
   }
 
+  void _applySearch() {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) {
+      _products = List<Product>.from(_allProducts);
+      return;
+    }
+
+    _products = _allProducts.where((product) {
+      final name = product.name.toLowerCase();
+      final category = (product.categoryName ?? '').toLowerCase();
+      return name.contains(query) || category.contains(query);
+    }).toList();
+  }
+
   void _onSearchChanged(String value) {
-    if (mounted) setState(() {});
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (mounted) _load(searchOnly: true);
-    });
+    setState(_applySearch);
   }
 
   void _clearSearch() {
-    _searchDebounce?.cancel();
     _searchController.clear();
-    _load(searchOnly: true);
+    setState(_applySearch);
   }
 
   Future<void> _openForm({Product? product}) async {
@@ -188,23 +187,15 @@ class _ProductsScreenState extends State<ProductsScreen> with WidgetsBindingObse
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              onSubmitted: (_) {
-                _searchDebounce?.cancel();
-                _load(searchOnly: true);
-              },
+              onSubmitted: (_) => setState(_applySearch),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Search products or category…',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
-                suffixIcon: _searching
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      )
-                    : (_searchController.text.isNotEmpty
+                suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: _clearSearch)
-                        : IconButton(icon: const Icon(Icons.search, size: 18), onPressed: () => _load(searchOnly: true))),
+                        : const Icon(Icons.search, size: 18)),
               ),
             ),
           ),

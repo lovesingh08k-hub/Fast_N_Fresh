@@ -17,7 +17,18 @@ const listUsers = asyncHandler(async (req, res) => {
   const seenAdminKeys = new Set();
   const visibleUsers = users.filter((user) => {
     if (user.role !== 'admin') return true;
-    const key = `${String(user.username || '').toLowerCase()}|${String(user.phone || '').replace(/\D/g, '')}`;
+
+    // Legacy data can contain duplicate admin documents with the same phone
+    // but different usernames (for example, an old seed username plus the
+    // current canonical username). The old username+phone key failed to hide
+    // those duplicates. Prefer phone as the stable identity; fall back to
+    // normalized username only when the phone is missing.
+    const normalizedPhone = String(user.phone || '').replace(/\D/g, '');
+    const normalizedUsername = String(user.username || '').trim().toLowerCase();
+    const key = normalizedPhone
+      ? `phone:${normalizedPhone}`
+      : `username:${normalizedUsername}`;
+
     if (seenAdminKeys.has(key)) return false;
     seenAdminKeys.add(key);
     return true;
