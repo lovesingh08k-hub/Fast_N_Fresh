@@ -1067,7 +1067,7 @@ const listOrders =
       200
     );
 
-    const filter = {};
+    const filter = { preLaunchTestData: { $ne: true } };
 
     if (paymentMethod) {
       filter.paymentMethod =
