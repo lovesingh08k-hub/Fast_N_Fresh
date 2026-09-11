@@ -73,14 +73,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.4"
-  circular_theme_reveal:
-    dependency: "direct main"
-    description:
-      name: circular_theme_reveal
-      sha256: c0fbae97143c376016d645d59282c93951d17a8ae9c3cf2cfcc60db761a2edb3
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.2"
   cli_util:
     dependency: transitive
     description:

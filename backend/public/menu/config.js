@@ -13,11 +13,11 @@
 // app.use('/menu', express.static(...)) in backend/src/app.js), so the API
 // domain below IS the same domain this page was loaded from.
 //
-// Verified against GET https://fast-n-fresh-api.onrender.com/api/health,
+// Verified against GET https://fast-n-fresh-slh9.onrender.com/api/health,
 // which should return { "success": true, "message": "Fast N Fresh Cafe API
 // is running." }.
 
 window.FNF_CONFIG = {
-  API_BASE_URL: 'https://fast-n-fresh-api.onrender.com/api',
+  API_BASE_URL: 'https://fast-n-fresh-slh9.onrender.com/api',
   VERIFIED: true,
 };

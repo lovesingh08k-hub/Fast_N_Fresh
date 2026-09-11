@@ -11,12 +11,12 @@
 // - The /api suffix is required because the backend API is mounted at /api.
 //
 // API URL has been verified against the production backend health endpoint
-// (GET https://fast-n-fresh-api.onrender.com/api/health).
+// (GET https://fast-n-fresh-slh9.onrender.com/api/health).
 //
 // This folder is the production static customer menu deployed by GitHub
 // Pages. The backend still contains a /menu copy for backward compatibility.
 
 window.FNF_CONFIG = {
-  API_BASE_URL: 'https://fast-n-fresh-api.onrender.com/api',
+  API_BASE_URL: 'https://fast-n-fresh-slh9.onrender.com/api',
   VERIFIED: true,
 };

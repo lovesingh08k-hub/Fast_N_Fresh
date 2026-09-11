@@ -260,9 +260,10 @@
       // Render can briefly cold-start. Retry GET requests once before showing
       // the customer an error. Never retry POST requests automatically.
       const method = String(options.method || 'GET').toUpperCase();
-      if (method === 'GET' && attempt === 0) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1200));
-        return apiRequest(path, options, 1);
+      if (method === 'GET' && attempt < 3) {
+        const delays = [1200, 2500, 5000];
+        await new Promise((resolve) => window.setTimeout(resolve, delays[attempt]));
+        return apiRequest(path, options, attempt + 1);
       }
 
       if (error?.name === 'AbortError') {

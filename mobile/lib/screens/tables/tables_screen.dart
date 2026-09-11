@@ -8,7 +8,7 @@ import '../../services/table_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../core/utils/pos_debug_log.dart';
-import '../pos/pos_screen.dart';
+import '../pos/direct_order_screen.dart';
 import 'table_detail_screen.dart';
 import 'table_form_screen.dart';
 import 'qr_management_screen.dart';
@@ -193,7 +193,7 @@ class _TablesScreenState extends State<TablesScreen> with WidgetsBindingObserver
       return _openDiningTables();
     }
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PosScreen(orderType: type)),
+      MaterialPageRoute(builder: (_) => DirectOrderScreen(orderType: type)),
     );
   }
 
