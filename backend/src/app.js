@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 
 const dns = require('dns');
 const mongoose = require('mongoose');
@@ -51,16 +51,25 @@ const apiLimiter = rateLimit({
 
 // Security & parsing middleware
 // crossOriginResourcePolicy relaxed so product images can be loaded by the
-// Flutter app (a different origin) — everything else stays locked down.
+// Flutter app (a different origin) â€” everything else stays locked down.
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(express.json({ limit: '2mb' }));
 app.use(mongoSanitize());
 app.use('/api', apiLimiter);
 
-const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+const defaultCorsOrigins = [
+  'https://lovesingh08k-hub.github.io',
+];
+
+const configuredCorsOrigins = [
+  ...new Set([
+    ...defaultCorsOrigins,
+    ...(process.env.CORS_ORIGIN || '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+  ]),
+];
 const isProduction = process.env.NODE_ENV === 'production';
 
 const corsMiddleware = cors({
@@ -96,7 +105,7 @@ if (process.env.NODE_ENV !== 'test') {
   );
 }
 
-// Serves uploaded product photos at e.g. GET /uploads/products/xyz.jpg —
+// Serves uploaded product photos at e.g. GET /uploads/products/xyz.jpg â€”
 // the Flutter app stores/loads the relative URL returned at upload time and
 // resolves it against ApiConfig.baseUrl, so no path is ever hard-coded.
 app.get('/uploads/products/:assetId', async (req, res, next) => {
