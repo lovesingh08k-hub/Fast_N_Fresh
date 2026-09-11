@@ -1,0 +1,40 @@
+{
+  "name": "fast-n-fresh-cafe-backend",
+  "version": "2.0.0",
+  "description": "Backend API for Fast N Fresh Cafe POS System",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "seed": "node src/utils/seed.js",
+    "cleanup:admins": "node src/utils/cleanupAdmins.js",
+    "seed:menu": "node src/utils/seedMenuFromPdf.js",
+    "migrate:table-numbers": "node src/utils/migrateTableNumbers.js",
+    "migrate:breakfast-biryani": "node src/utils/migrateBreakfastBiryani.js",
+    "migrate:kitchen-flow": "node src/utils/migrateKitchenFlow.js",
+    "check": "node scripts/check-syntax.js",
+    "reset:fresh": "node src/utils/resetFreshDatabase.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.4.0",
+    "express-validator": "^7.2.0",
+    "firebase-admin": "^12.7.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.6.0",
+    "morgan": "^1.10.0",
+    "multer": "^2.2.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

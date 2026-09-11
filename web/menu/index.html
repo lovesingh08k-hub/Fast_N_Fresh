@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+  />
+
+  <meta name="robots" content="noindex" />
+
+  <title>Fast N Fresh Cafe — Order</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- Initial loading screen -->
+  <section id="loadingState" class="full-page-state">
+    <img class="loading-logo" src="assets/fnf-logo.png" alt="Fast N Fresh Cafe" />
+    <div class="spinner"></div>
+    <h2>Loading menu</h2>
+    <p>Please wait a moment...</p>
+
+    <p id="loadingSlowHint" class="loading-slow-hint hidden">
+      Still waking up our kitchen server — thanks for your patience!
+    </p>
+
+    <div class="loading-credit">
+      <span class="loading-credit-mark">G</span>
+      Developed by GoogliXLabs
+    </div>
+  </section>
+
+
+  <!-- Error screen -->
+  <section id="errorState" class="full-page-state hidden">
+
+    <div class="state-icon error-icon">!</div>
+
+    <h2 id="errorTitle">Something went wrong</h2>
+
+    <p id="errorMessage">
+      Please try again or ask a staff member for help.
+    </p>
+
+    <button
+      id="retryBtn"
+      class="secondary-btn"
+      type="button"
+    >
+      Try Again
+    </button>
+
+  </section>
+
+
+  <!-- Order success screen -->
+  <section id="successState" class="full-page-state hidden">
+
+    <div class="state-icon success-icon">✓</div>
+
+    <div class="success-label">
+      ORDER CONFIRMED
+    </div>
+
+    <h2 id="successHeading">
+      Order placed!
+    </h2>
+
+    <p id="successSubtext">
+      Your order has been sent to the cafe.
+    </p>
+
+    <div class="success-card">
+
+      <div class="success-row">
+        <span>Table</span>
+        <strong id="successTable">—</strong>
+      </div>
+
+      <div class="success-row">
+        <span>Order number</span>
+        <strong id="successOrderNumber">—</strong>
+      </div>
+
+      <div class="success-row">
+        <span>Total</span>
+        <strong id="successTotal">—</strong>
+      </div>
+
+    </div>
+
+
+    <div class="success-items-heading">
+      Items you ordered
+    </div>
+
+    <div
+      id="successItems"
+      class="success-items"
+    ></div>
+
+
+    <div
+      id="successStatus"
+      class="order-status-card status-open"
+    >
+
+      <div class="order-status-dot"></div>
+
+      <div>
+
+        <div class="order-status-kicker">
+          LIVE ORDER STATUS
+        </div>
+
+        <div
+          id="successStatusText"
+          class="order-status-text"
+        >
+          Order received
+        </div>
+
+        <div class="order-status-help">
+          This updates automatically while the cafe prepares your order.
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div
+      id="feedbackBox"
+      class="feedback-box hidden"
+    >
+
+      <div class="feedback-title">
+        How was your experience?
+      </div>
+
+      <div
+        class="stars"
+        id="feedbackStars"
+      >
+        <button type="button" data-rating="1">★</button>
+        <button type="button" data-rating="2">★</button>
+        <button type="button" data-rating="3">★</button>
+        <button type="button" data-rating="4">★</button>
+        <button type="button" data-rating="5">★</button>
+      </div>
+
+      <textarea
+        id="feedbackComment"
+        maxlength="500"
+        placeholder="Optional feedback"
+      ></textarea>
+
+      <button
+        id="submitFeedbackBtn"
+        class="secondary-btn"
+        type="button"
+      >
+        Send Feedback
+      </button>
+
+      <div
+        id="feedbackMessage"
+        class="feedback-message"
+      ></div>
+
+    </div>
+
+
+    <button
+      id="doneBtn"
+      class="primary-btn success-done-btn"
+      type="button"
+    >
+      Done
+    </button>
+
+  </section>
+
+
+  <!--
+    Online payment state.
+
+    The customer is handed off to their installed UPI app. Returning to
+    this page never marks the payment as paid; cafe staff verify the payment.
+  -->
+  <section
+    id="upiPendingState"
+    class="full-page-state hidden"
+  >
+
+    <div class="state-icon pending-icon">
+      ₹
+    </div>
+
+
+    <div
+      class="success-label"
+      id="upiPendingLabel"
+    >
+      PAYMENT PENDING
+    </div>
+
+
+    <h2 id="upiPendingHeading">
+      Complete your online payment
+    </h2>
+
+
+    <p id="upiPendingSubtext">
+      Complete the payment in your UPI app. Return to this page when done.
+      The cafe will verify the payment before marking the order as paid.
+    </p>
+
+
+    <div class="success-card">
+
+      <div class="success-row">
+        <span>Table</span>
+        <strong id="upiPendingTable">—</strong>
+      </div>
+
+      <div class="success-row">
+        <span>Order number</span>
+        <strong id="upiPendingOrderNumber">—</strong>
+      </div>
+
+      <div class="success-row">
+        <span>Amount to pay</span>
+        <strong id="upiPendingTotal">—</strong>
+      </div>
+
+    </div>
+
+
+    <button
+      id="upiReopenBtn"
+      class="secondary-btn upi-pay-btn"
+      type="button"
+    >
+      OPEN UPI AGAIN
+    </button>
+
+
+    <div
+      id="upiPendingError"
+      class="error-banner hidden"
+    ></div>
+
+
+    <div
+      id="upiPendingStatusCard"
+      class="order-status-card status-open hidden"
+    >
+
+      <div class="order-status-dot"></div>
+
+      <div>
+
+        <div class="order-status-kicker">
+          PAYMENT STATUS
+        </div>
+
+        <div
+          id="upiPendingStatusText"
+          class="order-status-text"
+        >
+          UPI payment started — waiting for cafe verification
+        </div>
+
+        <div class="order-status-help">
+          Returning from the UPI app is not proof of payment.
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <button
+      id="upiCancelBtn"
+      class="text-btn danger-text-btn"
+      type="button"
+    >
+      Cancel this payment
+    </button>
+
+  </section>
+
+
+  <!-- Main menu -->
+  <div
+    id="app"
+    class="hidden"
+  >
+
+    <!-- Header -->
+    <header class="header">
+
+      <div class="header-top">
+
+        <div class="brand-area">
+
+          <div class="brand-lockup">
+
+            <img
+              class="brand-logo"
+              src="assets/fnf-logo.png"
+              alt="Fast N Fresh Cafe"
+            />
+
+            <div>
+
+              <div class="brand">
+                FAST N FRESH
+              </div>
+
+              <div class="brand-subtitle">
+                CAFE • FRESH FOOD & FAST SERVICE
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <div
+          class="table-badge"
+          id="tableBadge"
+        >
+          Table —
+        </div>
+
+      </div>
+
+
+      <!-- Search -->
+      <div class="search-box">
+
+        <span class="search-icon">
+          ⌕
+        </span>
+
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="Search food..."
+          autocomplete="off"
+          aria-label="Search food"
+        />
+
+        <button
+          id="clearSearch"
+          class="clear-search hidden"
+          type="button"
+          aria-label="Clear search"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <!-- Categories -->
+      <div
+        class="categories"
+        id="categoryChips"
+      ></div>
+
+    </header>
+
+
+    <!-- Menu -->
+    <main
+      class="product-list"
+      id="productList"
+    ></main>
+
+
+    <!-- Empty search result -->
+    <div
+      id="searchEmpty"
+      class="search-empty hidden"
+    >
+
+      <div class="empty-icon">
+        ⌕
+      </div>
+
+      <h3>
+        No food found
+      </h3>
+
+      <p>
+        Try searching for something else.
+      </p>
+
+      <button
+        id="clearSearchBtn"
+        class="secondary-btn"
+        type="button"
+      >
+        Clear Search
+      </button>
+
+    </div>
+
+
+    <!-- Sticky cart -->
+    <button
+      id="cartBar"
+      class="cart-bar hidden"
+      type="button"
+    >
+
+      <div class="cart-bar-left">
+
+        <div class="cart-icon">
+          🛒
+        </div>
+
+        <div>
+
+          <div class="cart-bar-title">
+            View Cart
+          </div>
+
+          <div
+            class="cart-bar-count"
+            id="cartCount"
+          >
+            0 items
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="cart-bar-right">
+
+        <span id="cartBarTotal">
+          ₹0
+        </span>
+
+        <span class="cart-arrow">
+          →
+        </span>
+
+      </div>
+
+    </button>
+
+  </div>
+
+
+  <!-- Cart overlay -->
+  <div
+    class="overlay hidden"
+    id="cartOverlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="cartTitle"
+  >
+
+    <div class="sheet">
+
+
+      <!-- Cart header -->
+      <div class="sheet-header">
+
+        <div>
+
+          <div
+            class="sheet-title"
+            id="cartTitle"
+          >
+            Your Order
+          </div>
+
+          <div class="sheet-subtitle">
+            Review your items before ordering
+          </div>
+
+        </div>
+
+
+        <button
+          class="close-btn"
+          id="closeCart"
+          type="button"
+          aria-label="Close cart"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <!-- Cart content -->
+      <div class="sheet-body">
+
+        <div id="cartLines"></div>
+
+
+        <!-- Total -->
+        <div class="summary">
+
+          <div class="summary-row">
+
+            <span>
+              Items
+            </span>
+
+            <span id="cartItemCount">
+              0
+            </span>
+
+          </div>
+
+
+          <div class="summary-row total">
+
+            <span>
+              Total
+            </span>
+
+            <span id="cartTotal">
+              ₹0
+            </span>
+
+          </div>
+
+        </div>
+
+
+        <!-- Customer details -->
+        <div class="checkout-section">
+
+          <div class="section-title">
+            Almost done
+          </div>
+
+          <div class="section-description">
+            Add your name so the staff can identify your order.
+          </div>
+
+
+          <div class="field-group">
+
+            <div class="field-label">
+              Customer details
+              <span class="optional">
+                (name or phone required)
+              </span>
+            </div>
+
+
+            <label
+              class="field-label"
+              for="customerName"
+            >
+              Your name
+              <span class="required">
+                *
+              </span>
+            </label>
+
+
+            <input
+              class="field-input"
+              id="customerName"
+              type="text"
+              placeholder="e.g. Rahul"
+              maxlength="100"
+              autocomplete="name"
+            />
+
+          </div>
+
+
+          <div class="field-group">
+
+            <label
+              class="field-label"
+              for="customerPhone"
+            >
+              Phone number
+              <span class="optional">
+                (optional)
+              </span>
+            </label>
+
+
+            <input
+              class="field-input"
+              id="customerPhone"
+              type="tel"
+              inputmode="numeric"
+              placeholder="e.g. 9876543210"
+              maxlength="20"
+              autocomplete="tel"
+            />
+
+          </div>
+
+
+          <!-- Payment -->
+          <div class="field-group payment-method-section">
+
+            <div class="field-label">
+              Payment
+            </div>
+
+
+            <label class="payment-option">
+
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="counter"
+                checked
+              />
+
+              <span>
+                <strong>
+                  Pay at Counter
+                </strong>
+
+                <small>
+                  Pay when you collect your order.
+                </small>
+              </span>
+
+            </label>
+
+
+            <label
+              class="payment-option"
+              id="onlinePaymentOption"
+              style="display:none;"
+            >
+
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="upi"
+              />
+
+              <span>
+
+                <strong>
+                  Pay Online via UPI
+                </strong>
+
+                <small>
+                  Pay securely through the payment gateway.
+                </small>
+
+              </span>
+
+            </label>
+
+
+            <button
+              id="payUpiBtn"
+              class="secondary-btn upi-pay-btn hidden"
+              type="button"
+            >
+              PAY WITH UPI
+            </button>
+
+
+            <div
+              class="field-help upi-help-text"
+              id="upiHelpText"
+              style="display:none;"
+            >
+              You will be redirected to the secure payment gateway.
+              Your payment will be verified automatically by the server.
+            </div>
+
+          </div>
+
+
+          <!-- Special instructions -->
+          <div class="field-group">
+
+            <label
+              class="field-label"
+              for="orderNote"
+            >
+              Special instructions
+              <span class="optional">
+                (optional)
+              </span>
+            </label>
+
+
+            <textarea
+              class="field-textarea"
+              id="orderNote"
+              placeholder="Less spicy, no onions..."
+              maxlength="300"
+            ></textarea>
+
+          </div>
+
+        </div>
+
+
+        <!-- Checkout error -->
+        <div
+          id="checkoutError"
+          class="error-banner hidden"
+        ></div>
+
+
+        <!-- Place order -->
+        <button
+          class="primary-btn"
+          id="placeOrderBtn"
+          type="button"
+        >
+          Place Order
+        </button>
+
+
+        <div class="secure-note">
+          Your order will be sent directly to the cafe.
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <script src="config.js?v=20260907"></script>
+  <script src="app.js?v=20260907"></script>
+
+</body>
+</html>

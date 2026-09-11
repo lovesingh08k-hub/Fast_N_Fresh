@@ -1,0 +1,138 @@
+# ============================================================
+# Fast N Fresh - Root .gitignore
+# ============================================================
+
+# ------------------------------------------------------------
+# Miscellaneous
+# ------------------------------------------------------------
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+Thumbs.db
+.atom/
+.buildlog/
+.history/
+.svn/
+migrate_working_dir/
+
+# ------------------------------------------------------------
+# IntelliJ / Android Studio
+# ------------------------------------------------------------
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# ------------------------------------------------------------
+# VS Code
+# Keep .vscode if you want to share project configuration.
+# Uncomment the next line if you want it completely private.
+# ------------------------------------------------------------
+# .vscode/
+
+# ------------------------------------------------------------
+# Flutter / Dart / Pub
+# ------------------------------------------------------------
+**/doc/api/
+.dart_tool/
+**/.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+**/build/
+**/dist/
+
+flutter_*.png
+linked_*.ds
+unlinked.ds
+unlinked_spec.ds
+
+# ------------------------------------------------------------
+# Flutter symbolication / obfuscation
+# ------------------------------------------------------------
+app.*.symbols
+app.*.map.json
+
+# ------------------------------------------------------------
+# Android generated files
+# ------------------------------------------------------------
+android/.gradle/
+android/captures/
+android/local.properties
+mobile/android/.gradle/
+mobile/android/local.properties
+
+# ------------------------------------------------------------
+# Android build outputs
+# ------------------------------------------------------------
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+mobile/android/app/debug/
+mobile/android/app/profile/
+mobile/android/app/release/
+
+# ------------------------------------------------------------
+# Android Gradle wrapper - ONLY ignore these if you intentionally
+# don't want them in Git.
+# ------------------------------------------------------------
+
+# ------------------------------------------------------------
+# Android signing / private keys
+# NEVER commit these
+# ------------------------------------------------------------
+**/key.properties
+**/*.jks
+**/*.keystore
+**/*.p12
+
+android/keystore/
+mobile/android/keystore/
+
+# ------------------------------------------------------------
+# Environment variables / secrets
+# ------------------------------------------------------------
+.env
+.env.*
+
+# ------------------------------------------------------------
+# Firebase / Google private service-account credentials
+# ------------------------------------------------------------
+**/firebase-service-account.json
+**/firebase-adminsdk*.json
+**/service-account*.json
+
+# ------------------------------------------------------------
+# Backend runtime uploads
+# ------------------------------------------------------------
+backend/uploads/
+mobile/backend/uploads/
+
+# ------------------------------------------------------------
+# Backend logs / runtime files
+# ------------------------------------------------------------
+backend/*.log
+backend/logs/
+backend/tmp/
+backend/temp/
+
+# ------------------------------------------------------------
+# Node
+# ------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ------------------------------------------------------------
+# OS / editor temporary files
+# ------------------------------------------------------------
+*.tmp
+*.temp
+*.bak
+*~

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "204831180059",
+    "project_id": "fast-n-fresh-e8c53",
+    "storage_bucket": "fast-n-fresh-e8c53.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:204831180059:android:6b1920eafdc6e5c971bfbe",
+        "android_client_info": {
+          "package_name": "com.fastnfresh.cafe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKIX7GuofHIDt9Kad4tYQ2T2vWFOH_7c4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
