@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="description" content="Official FAST N FRESH Cafe Manager Android app download page.">
+  <title>FAST N FRESH — Install App</title>
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f8fafc;background:#08111f}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,#124e3b 0,#08111f 38%),#08111f;display:flex;justify-content:center;padding:24px}
+    .shell{width:min(760px,100%);padding:18px}.card{background:rgba(17,27,42,.92);border:1px solid rgba(255,255,255,.09);border-radius:28px;padding:30px;box-shadow:0 24px 80px rgba(0,0,0,.4);backdrop-filter:blur(12px)}
+    .top{display:flex;align-items:center;gap:16px}.logo{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:#eafff7;color:#0e7c5a;font-size:30px;font-weight:900}.brand{font-size:26px;font-weight:900;letter-spacing:.7px}.sub{color:#aab7c8;margin-top:4px}
+    .hero{text-align:center;padding:34px 0 24px}.pill{display:inline-flex;gap:8px;align-items:center;background:#0c3c2e;color:#8ff0c9;border:1px solid #17674d;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:800}.dot{width:8px;height:8px;background:#48e39b;border-radius:50%}.hero h1{font-size:clamp(30px,7vw,48px);margin:18px 0 10px;line-height:1.05}.hero p{color:#aab7c8;max-width:540px;margin:0 auto;line-height:1.6}
+    .version{margin:22px auto 0;width:min(440px,100%);background:#0d1725;border:1px solid #25364d;border-radius:18px;padding:16px}.version strong{font-size:19px}.muted{color:#8e9caf;font-size:13px;margin-top:4px}.notes{margin:18px auto 0;max-width:520px;background:#0b1522;border-radius:16px;padding:15px;text-align:left;color:#cbd5e1;font-size:14px;line-height:1.55;white-space:pre-wrap}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}.btn{display:flex;justify-content:center;align-items:center;min-height:52px;border-radius:15px;text-decoration:none;font-weight:900;border:1px solid #2b3d54;color:#fff;background:#172337}.btn.primary{background:#0e7c5a;border-color:#0e7c5a}.btn.disabled{opacity:.45;pointer-events:none}
+    .qrbox{margin:28px auto 0;background:#fff;border-radius:20px;padding:18px;width:max-content;max-width:100%;text-align:center}.qrbox img{width:190px;height:190px;display:block}.qrlabel{color:#111827;font-weight:800;font-size:12px;margin-top:10px}
+    .steps{margin-top:28px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.step{background:#0d1725;border:1px solid #233349;border-radius:16px;padding:15px}.num{font-weight:900;color:#8ff0c9}.step h3{font-size:14px;margin:8px 0 5px}.step p{font-size:12px;line-height:1.5;color:#93a2b5;margin:0}.footer{text-align:center;color:#718096;font-size:12px;margin-top:22px;line-height:1.6}
+    @media(max-width:620px){.card{padding:22px}.actions,.steps{grid-template-columns:1fr}.top .brand{font-size:22px}.qrbox img{width:170px;height:170px}}
+  </style>
+</head>
+<body>
+<main class="shell"><section class="card">
+  <header class="top"><div class="logo">☕</div><div><div class="brand">FAST N FRESH</div><div class="sub">Cafe Manager • Official Android App</div></div></header>
+  <section class="hero">
+    <span class="pill"><span class="dot"></span><span id="status">Checking latest version…</span></span>
+    <h1>Install FAST N FRESH</h1>
+    <p>Use the button below or scan the QR code. This page always points to the latest released Android app.</p>
+    <div class="version"><strong id="version">Loading…</strong><div class="muted" id="build"></div></div>
+    <div class="notes" id="notes" hidden></div>
+  </section>
+  <div class="actions"><a id="download" class="btn primary disabled" href="#">Download APK</a><button id="copy" class="btn" type="button">Copy Install Link</button></div>
+  <div class="qrbox"><img id="qr" alt="QR code to install FAST N FRESH"/><div class="qrlabel">Scan with the client's Android phone</div></div>
+  <section class="steps"><div class="step"><div class="num">01</div><h3>Open this page</h3><p>Send this same link or QR code to the client.</p></div><div class="step"><div class="num">02</div><h3>Download</h3><p>Tap Download APK and wait for the file to finish.</p></div><div class="step"><div class="num">03</div><h3>Install</h3><p>Open the APK and allow installation if Android asks.</p></div></section>
+  <div class="footer">For future releases, keep using this same page. The release system updates the latest APK and version automatically.</div>
+</section></main>
+<script>
+(async function(){
+  const pageUrl = window.location.href.split('#')[0];
+  const qr = document.getElementById('qr');
+  qr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=12&data=' + encodeURIComponent(pageUrl);
+  document.getElementById('copy').onclick = async () => { try { await navigator.clipboard.writeText(pageUrl); document.getElementById('copy').textContent='Copied ✓'; setTimeout(()=>document.getElementById('copy').textContent='Copy Install Link',1500); } catch(e) { window.prompt('Copy this install link:',pageUrl); } };
+  try {
+    const r = await fetch('/api/app-update',{cache:'no-store'}); const d = await r.json();
+    const ok = d && d.enabled && d.downloadUrl;
+    document.getElementById('status').textContent = ok ? 'Latest release ready' : 'Download not configured yet';
+    document.getElementById('version').textContent = ok ? 'Version ' + d.version : 'No release published';
+    document.getElementById('build').textContent = ok ? ('Build ' + d.buildNumber) : 'Ask the app administrator to publish a release.';
+    if(d.notes){const n=document.getElementById('notes');n.hidden=false;n.textContent=d.notes;}
+    if(ok){const a=document.getElementById('download');a.href=d.downloadUrl;a.classList.remove('disabled');}
+  } catch(e){document.getElementById('status').textContent='Could not check release';document.getElementById('version').textContent='Try again';}
+})();
+</script>
+</body></html>

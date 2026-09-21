@@ -1,0 +1,141 @@
+﻿name: Release Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "App version, e.g. 1.5.33"
+        required: true
+        type: string
+      build_number:
+        description: "Android build number. Leave blank to auto-increment."
+        required: false
+        type: string
+      release_notes:
+        description: "Release notes"
+        required: false
+        type: string
+        default: "Bug fixes and improvements."
+      force_update:
+        description: "Force users to update"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Read current version
+        id: current_version
+        working-directory: mobile
+        shell: bash
+        run: |
+          VERSION_LINE=$(grep '^version:' pubspec.yaml)
+          CURRENT_VERSION=$(echo "$VERSION_LINE" | sed -E 's/version: ([^+]+).*/\1/')
+          CURRENT_BUILD=$(echo "$VERSION_LINE" | sed -E 's/version: [^+]+\+([0-9]+)/\1/')
+          echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "current_build=$CURRENT_BUILD" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate build number
+        id: build
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.build_number }}" ]; then
+            BUILD="${{ inputs.build_number }}"
+          else
+            BUILD=$(( ${{ steps.current_version.outputs.current_build }} + 1 ))
+          fi
+          echo "build_number=$BUILD" >> "$GITHUB_OUTPUT"
+
+      - name: Update Flutter version
+        working-directory: mobile
+        shell: bash
+        run: |
+          sed -i -E "s/^version:.*/version: ${{ inputs.version }}+${{ steps.build.outputs.build_number }}/" pubspec.yaml
+          grep '^version:' pubspec.yaml
+
+      - name: Decode Android keystore
+        shell: bash
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > mobile/android/upload-keystore.jks
+
+      - name: Create key.properties
+        shell: bash
+        run: |
+          cat > mobile/android/key.properties <<EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=../upload-keystore.jks
+          EOF
+
+      - name: Flutter pub get
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Flutter analyze
+        working-directory: mobile
+        run: flutter analyze
+
+      - name: Build release APK
+        working-directory: mobile
+        run: flutter build apk --release
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          mkdir -p release
+
+          cp mobile/build/app/outputs/flutter-apk/app-release.apk \
+            release/fast-n-fresh.apk
+
+          cat > release/manifest.json <<EOF
+          {
+            "enabled": true,
+            "version": "${{ inputs.version }}",
+            "buildNumber": ${{ steps.build.outputs.build_number }},
+            "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/fast-n-fresh.apk",
+            "notes": "${{ inputs.release_notes }}",
+            "forceUpdate": ${{ inputs.force_update }}
+          }
+          EOF
+
+          cat release/manifest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Fast N Fresh ${{ inputs.version }}
+          body: |
+            ## Fast N Fresh ${{ inputs.version }}
+
+            Build: ${{ steps.build.outputs.build_number }}
+
+            ${{ inputs.release_notes }}
+          files: |
+            release/fast-n-fresh.apk
+            release/manifest.json
+          generate_release_notes: false

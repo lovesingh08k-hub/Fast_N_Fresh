@@ -8,6 +8,7 @@ import '../../models/misc_models.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../services/misc_services.dart';
 import '../../services/auth_service.dart';
+import '../../services/app_update_service.dart';
 import '../../providers/theme_provider.dart';
 import 'printer_settings_screen.dart';
 
@@ -34,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   late TextEditingController _taxPercentController;
   late TextEditingController _defaultDiscountController;
   bool _taxEnabled = false;
+  bool _checkingUpdate = false;
 
   AppLifecycleState? _lastLifecycleState;
   ConnectivityProvider? _connectivity;
@@ -135,6 +137,84 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Settings saved.')));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _checkForUpdate() async {
+    if (_checkingUpdate) return;
+    setState(() => _checkingUpdate = true);
+
+    try {
+      final result = await AppUpdateService.instance.checkForUpdate();
+      if (!mounted) return;
+
+      if (!result.hasUpdate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are already using the latest version.')),
+        );
+        return;
+      }
+
+      final update = result.update!;
+      final install = await showDialog<bool>(
+        context: context,
+        barrierDismissible: !update.forceUpdate,
+        builder: (dialogContext) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.system_update_alt_rounded),
+              SizedBox(width: 10),
+              Expanded(child: Text('New update available')),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Version ${update.version} (${update.buildNumber})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (update.notes.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(update.notes.trim()),
+                ],
+                const SizedBox(height: 16),
+                const Text(
+                  'The app will open the secure download page. Android may ask you to confirm the installation.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (!update.forceUpdate)
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Later')),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.download_rounded),
+              label: const Text('Update Now'),
+            ),
+          ],
+        ),
+      );
+
+      if (install == true) {
+        final opened = await AppUpdateService.instance.openDownload(update.downloadUrl);
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open the update download link.')),
+          );
+        }
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not check for updates right now.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
     }
   }
 
@@ -246,7 +326,10 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                     ),
                     SizedBox(height: 28),
                     _sectionTitle('App'),
-                    _AppInfoTile(),
+                    _AppInfoTile(
+                      checkingUpdate: _checkingUpdate,
+                      onCheckForUpdate: _checkForUpdate,
+                    ),
                   ],
                 ),
     );
@@ -268,7 +351,13 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
 }
 
 class _AppInfoTile extends StatelessWidget {
-  _AppInfoTile();
+  final bool checkingUpdate;
+  final VoidCallback onCheckForUpdate;
+
+  const _AppInfoTile({
+    required this.checkingUpdate,
+    required this.onCheckForUpdate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -283,6 +372,16 @@ class _AppInfoTile extends StatelessWidget {
               ListTile(leading: Icon(Icons.local_cafe_outlined), title: Text('FAST N FRESH CAFE'), subtitle: Text('Cafe Management & POS')),
               Divider(height: 1),
               ListTile(leading: Icon(Icons.info_outline), title: Text('Version'), subtitle: Text(version)),
+              Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.system_update_alt_rounded, color: AppColors.primary),
+                title: Text('App Updates'),
+                subtitle: Text(checkingUpdate ? 'Checking for the latest version…' : 'Check and download the latest APK'),
+                trailing: checkingUpdate
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.chevron_right),
+                onTap: checkingUpdate ? null : onCheckForUpdate,
+              ),
             ],
           ),
         );
