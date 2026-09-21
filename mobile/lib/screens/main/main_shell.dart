@@ -12,6 +12,7 @@ import '../customers/customers_screen.dart';
 import '../settings/more_screen.dart';
 import '../pos/new_order_screen.dart';
 import '../settings/profile_screen.dart';
+import '../../services/app_update_service.dart';
 
 /// App-wide navigation shell.
 ///
@@ -37,6 +38,54 @@ class _MainShellState extends State<MainShell> {
     _user = context.read<AuthProvider>().currentUser!;
     _items = _buildNavigation(_user);
     _pages = _items.map((item) => item.page).toList(growable: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForAvailableUpdate());
+  }
+
+  Future<void> _checkForAvailableUpdate() async {
+    try {
+      final result = await AppUpdateService.instance.checkForUpdate();
+      if (!mounted || !result.hasUpdate) return;
+
+      final update = result.update!;
+      final shouldUpdate = await showDialog<bool>(
+        context: context,
+        barrierDismissible: !update.forceUpdate,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('New FAST N FRESH update'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Version ${update.version} (${update.buildNumber})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (update.notes.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(update.notes.trim()),
+                ],
+                const SizedBox(height: 14),
+                const Text('Download the latest APK and install it when Android asks for confirmation.'),
+              ],
+            ),
+          ),
+          actions: [
+            if (!update.forceUpdate)
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Later')),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.download_rounded),
+              label: const Text('Update Now'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldUpdate == true) {
+        await AppUpdateService.instance.openDownload(update.downloadUrl);
+      }
+    } catch (_) {
+      // Update checks are non-blocking. The POS continues normally when the
+      // backend is sleeping, offline, or update metadata is not configured.
+    }
   }
 
   List<_NavItem> _buildNavigation(AppUser user) {

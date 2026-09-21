@@ -15,7 +15,7 @@ class BrandLockup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final logoSize = compact ? 38.0 : 72.0;
-    final titleSize = compact ? 15.0 : 22.0;
+    final titleSize = compact ? 15.0 : 18.0;
 
     return Column(
       mainAxisSize: MainAxisSize.min,

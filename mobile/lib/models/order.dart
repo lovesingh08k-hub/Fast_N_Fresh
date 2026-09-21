@@ -105,6 +105,7 @@ class Order {
   final String orderSource; // pos | qr — how this order was placed
   final String? tableId;
   final String? tableName;
+  final int? tableNumber;
   final String? tableCustomerLabel;
   final QrCustomerContact? qrCustomerContact;
   final DeliveryInfo? deliveryInfo;
@@ -139,6 +140,7 @@ class Order {
     this.orderSource = 'pos',
     this.tableId,
     this.tableName,
+    this.tableNumber,
     this.tableCustomerLabel,
     this.qrCustomerContact,
     this.deliveryInfo,
@@ -179,6 +181,7 @@ class Order {
       orderSource: json['orderSource'] as String? ?? 'pos',
       tableId: tableField is Map ? tableField['_id'] as String? : tableField as String?,
       tableName: tableField is Map ? tableField['name'] as String? : null,
+      tableNumber: tableField is Map ? (tableField['number'] as num?)?.toInt() : null,
       tableCustomerLabel: json['tableCustomerLabel'] as String?,
       qrCustomerContact: json['qrCustomerContact'] != null
           ? QrCustomerContact.fromJson(json['qrCustomerContact'] as Map<String, dynamic>?)

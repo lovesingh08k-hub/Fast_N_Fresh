@@ -144,7 +144,7 @@ class _SplashScreenState extends State<_SplashScreen> {
             const SizedBox(height: 18),
             const Text(
               'FAST N FRESH',
-              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1.8),
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.8),
             ),
             const SizedBox(height: 6),
             const Text(

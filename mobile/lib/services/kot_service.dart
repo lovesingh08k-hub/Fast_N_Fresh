@@ -38,13 +38,15 @@ class KotService {
       marginBottom: 3 * PdfPageFormat.mm,
     );
 
-    final orderFrom = order.tableName?.trim().isNotEmpty == true
-        ? 'Table ${order.tableName!.trim()}'
-        : order.orderType == 'delivery'
-            ? 'Delivery'
-            : order.orderType == 'takeaway'
-                ? 'Take Away'
-                : 'Dine In';
+    final orderFrom = order.tableNumber != null
+        ? 'Table No: ${order.tableNumber}'
+        : order.tableName?.trim().isNotEmpty == true
+            ? 'Table No: ${order.tableName!.trim().replaceFirst(RegExp(r'^Table\\s*', caseSensitive: false), '')}'
+            : order.orderType == 'delivery'
+                ? 'Delivery'
+                : order.orderType == 'takeaway'
+                    ? 'Take Away'
+                    : 'Dine In';
 
     final doc = pw.Document();
     doc.addPage(
@@ -111,13 +113,15 @@ class KotService {
       marginBottom: 3 * PdfPageFormat.mm,
     );
 
-    final source = order.tableName?.trim().isNotEmpty == true
-        ? 'Table ${order.tableName!.trim()}'
-        : order.orderType == 'delivery'
-            ? 'Delivery'
-            : order.orderType == 'takeaway'
-                ? 'Take Away'
-                : 'Dine In';
+    final source = order.tableNumber != null
+        ? 'Table No: ${order.tableNumber}'
+        : order.tableName?.trim().isNotEmpty == true
+            ? 'Table No: ${order.tableName!.trim().replaceFirst(RegExp(r'^Table\\s*', caseSensitive: false), '')}'
+            : order.orderType == 'delivery'
+                ? 'Delivery'
+                : order.orderType == 'takeaway'
+                    ? 'Take Away'
+                    : 'Dine In';
 
     final doc = pw.Document();
     doc.addPage(
@@ -191,7 +195,15 @@ class KotService {
     final profile = await CapabilityProfile.load();
     final generator = Generator(isNarrow ? PaperSize.mm58 : PaperSize.mm80, profile);
     final chars = isNarrow ? 30 : 48;
-    final source = order.tableName?.trim().isNotEmpty == true ? 'Table ${order.tableName!.trim()}' : order.orderType == 'delivery' ? 'Delivery' : order.orderType == 'takeaway' ? 'Take Away' : 'Dine In';
+    final source = order.tableNumber != null
+        ? 'Table No: ${order.tableNumber}'
+        : order.tableName?.trim().isNotEmpty == true
+            ? 'Table No: ${order.tableName!.trim().replaceFirst(RegExp(r'^Table\\s*', caseSensitive: false), '')}'
+            : order.orderType == 'delivery'
+                ? 'Delivery'
+                : order.orderType == 'takeaway'
+                    ? 'Take Away'
+                    : 'Dine In';
     List<int> bytes = [];
     bytes += generator.text(_fit(settings.cafeName, chars), styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
     bytes += generator.text('KITCHEN ORDER TICKET #${ticket.kotNumber}', styles: const PosStyles(align: PosAlign.center, bold: true));
@@ -243,13 +255,15 @@ class KotService {
     final generator = Generator(isNarrow ? PaperSize.mm58 : PaperSize.mm80, profile);
     final chars = isNarrow ? 30 : 48;
 
-    final orderFrom = order.tableName?.trim().isNotEmpty == true
-        ? 'Table ${order.tableName!.trim()}'
-        : order.orderType == 'delivery'
-            ? 'Delivery'
-            : order.orderType == 'takeaway'
-                ? 'Take Away'
-                : 'Dine In';
+    final orderFrom = order.tableNumber != null
+        ? 'Table No: ${order.tableNumber}'
+        : order.tableName?.trim().isNotEmpty == true
+            ? 'Table No: ${order.tableName!.trim().replaceFirst(RegExp(r'^Table\\s*', caseSensitive: false), '')}'
+            : order.orderType == 'delivery'
+                ? 'Delivery'
+                : order.orderType == 'takeaway'
+                    ? 'Take Away'
+                    : 'Dine In';
 
     List<int> bytes = [];
     bytes += generator.text(

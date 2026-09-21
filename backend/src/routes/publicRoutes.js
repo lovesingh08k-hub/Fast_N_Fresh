@@ -13,6 +13,27 @@ const { paymentWebhook } = require('../controllers/paymentWebhookController');
 
 const router = express.Router();
 
+// Public app-update metadata. This endpoint intentionally requires no login so
+// an installed APK can check for a newer build before an authenticated API
+// session is available. Configure the values in the backend environment.
+router.get('/app-update', (req, res) => {
+  const version = String(process.env.APP_UPDATE_VERSION || '').trim();
+  const buildNumber = Number.parseInt(process.env.APP_UPDATE_BUILD || '0', 10) || 0;
+  const downloadUrl = String(process.env.APP_UPDATE_DOWNLOAD_URL || '').trim();
+  const notes = String(process.env.APP_UPDATE_NOTES || '').trim();
+  const forceUpdate = String(process.env.APP_UPDATE_FORCE || '').toLowerCase() === 'true';
+
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.json({
+    enabled: Boolean(version && buildNumber > 0 && downloadUrl),
+    version,
+    buildNumber,
+    downloadUrl,
+    notes,
+    forceUpdate,
+  });
+});
+
 // Intentionally NOT behind `protect` — this is the customer-facing surface.
 // Every handler here only ever reads customer-safe data or writes a new,
 // server-priced order; nothing here can touch Admin/Staff data.
