@@ -33,32 +33,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # --------------------------------------------------
+      # FLUTTER
+      # --------------------------------------------------
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      # --------------------------------------------------
+      # JAVA
+      # --------------------------------------------------
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
+      # --------------------------------------------------
+      # READ CURRENT VERSION
+      # --------------------------------------------------
       - name: Read current version
         id: current_version
         working-directory: mobile
         shell: bash
         run: |
+          set -e
+
           VERSION_LINE=$(grep '^version:' pubspec.yaml)
 
           CURRENT_VERSION=$(echo "$VERSION_LINE" | sed -E 's/version: ([^+]+).*/\1/')
           CURRENT_BUILD=$(echo "$VERSION_LINE" | sed -E 's/version: [^+]+\+([0-9]+)/\1/')
+
+          if [ -z "$CURRENT_VERSION" ]; then
+            echo "ERROR: Could not read current Flutter version."
+            exit 1
+          fi
+
+          if [ -z "$CURRENT_BUILD" ]; then
+            echo "ERROR: Could not read current Flutter build number."
+            exit 1
+          fi
 
           echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
           echo "current_build=$CURRENT_BUILD" >> "$GITHUB_OUTPUT"
@@ -66,23 +90,39 @@ jobs:
           echo "Current version: $CURRENT_VERSION"
           echo "Current build: $CURRENT_BUILD"
 
+      # --------------------------------------------------
+      # CALCULATE BUILD NUMBER
+      # --------------------------------------------------
       - name: Calculate build number
         id: build
         shell: bash
         run: |
+          set -e
+
           if [ -n "${{ inputs.build_number }}" ]; then
             BUILD="${{ inputs.build_number }}"
           else
             BUILD=$(( ${{ steps.current_version.outputs.current_build }} + 1 ))
           fi
 
+          if ! [[ "$BUILD" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Invalid build number: $BUILD"
+            exit 1
+          fi
+
           echo "build_number=$BUILD" >> "$GITHUB_OUTPUT"
+
           echo "Using build number: $BUILD"
 
+      # --------------------------------------------------
+      # UPDATE FLUTTER VERSION
+      # --------------------------------------------------
       - name: Update Flutter version
         working-directory: mobile
         shell: bash
         run: |
+          set -e
+
           sed -i -E \
             "s/^version:.*/version: ${{ inputs.version }}+${{ steps.build.outputs.build_number }}/" \
             pubspec.yaml
@@ -90,9 +130,14 @@ jobs:
           echo "Updated Flutter version:"
           grep '^version:' pubspec.yaml
 
+      # --------------------------------------------------
+      # DECODE ANDROID KEYSTORE
+      # --------------------------------------------------
       - name: Decode Android keystore
         shell: bash
         run: |
+          set -e
+
           if [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
             echo "ERROR: ANDROID_KEYSTORE_BASE64 secret is missing."
             exit 1
@@ -102,11 +147,23 @@ jobs:
             | base64 --decode \
             > mobile/android/upload-keystore.jks
 
+          if [ ! -f "mobile/android/upload-keystore.jks" ]; then
+            echo "ERROR: Keystore file was not created."
+            exit 1
+          fi
+
           echo "Keystore created successfully."
 
+          ls -lh mobile/android/upload-keystore.jks
+
+      # --------------------------------------------------
+      # CREATE KEY.PROPERTIES
+      # --------------------------------------------------
       - name: Create key.properties
         shell: bash
         run: |
+          set -e
+
           if [ -z "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ]; then
             echo "ERROR: ANDROID_KEYSTORE_PASSWORD secret is missing."
             exit 1
@@ -126,26 +183,72 @@ jobs:
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=../upload-keystore.jks
+          storeFile=upload-keystore.jks
           EOF
 
           echo "key.properties created successfully."
 
+          echo "Configured keystore:"
+          echo "storeFile=upload-keystore.jks"
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}"
+
+      # --------------------------------------------------
+      # VERIFY SIGNING FILES
+      # --------------------------------------------------
+      - name: Verify Android signing configuration
+        shell: bash
+        run: |
+          set -e
+
+          echo "Checking Android signing files..."
+
+          if [ ! -f "mobile/android/upload-keystore.jks" ]; then
+            echo "ERROR: upload-keystore.jks not found."
+            exit 1
+          fi
+
+          if [ ! -f "mobile/android/key.properties" ]; then
+            echo "ERROR: key.properties not found."
+            exit 1
+          fi
+
+          echo "Keystore:"
+          ls -lh mobile/android/upload-keystore.jks
+
+          echo "key.properties:"
+          ls -lh mobile/android/key.properties
+
+          echo "Signing files verified successfully."
+
+      # --------------------------------------------------
+      # FLUTTER PUB GET
+      # --------------------------------------------------
       - name: Flutter pub get
         working-directory: mobile
         run: flutter pub get
 
+      # --------------------------------------------------
+      # FLUTTER ANALYZE
+      # --------------------------------------------------
       - name: Flutter analyze
         working-directory: mobile
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      # --------------------------------------------------
+      # BUILD RELEASE APK
+      # --------------------------------------------------
       - name: Build release APK
         working-directory: mobile
         run: flutter build apk --release
 
+      # --------------------------------------------------
+      # VERIFY APK
+      # --------------------------------------------------
       - name: Verify APK
         shell: bash
         run: |
+          set -e
+
           APK_PATH="mobile/build/app/outputs/flutter-apk/app-release.apk"
 
           if [ ! -f "$APK_PATH" ]; then
@@ -156,12 +259,18 @@ jobs:
           echo "APK generated successfully:"
           ls -lh "$APK_PATH"
 
+      # --------------------------------------------------
+      # PREPARE RELEASE FILES
+      # --------------------------------------------------
       - name: Prepare release files
         shell: bash
         run: |
+          set -e
+
           mkdir -p release
 
-          cp mobile/build/app/outputs/flutter-apk/app-release.apk \
+          cp \
+            mobile/build/app/outputs/flutter-apk/app-release.apk \
             release/fast-n-fresh.apk
 
           cat > release/manifest.json <<EOF
@@ -178,6 +287,12 @@ jobs:
           echo "Release manifest:"
           cat release/manifest.json
 
+          echo "Release files:"
+          ls -lh release/
+
+      # --------------------------------------------------
+      # CREATE GITHUB RELEASE
+      # --------------------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
