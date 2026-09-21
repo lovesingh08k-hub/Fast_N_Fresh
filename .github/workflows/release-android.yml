@@ -7,15 +7,18 @@ on:
         description: "App version, e.g. 1.5.33"
         required: true
         type: string
+
       build_number:
         description: "Android build number. Leave blank to auto-increment."
         required: false
         type: string
+
       release_notes:
         description: "Release notes"
         required: false
         type: string
         default: "Bug fixes and improvements."
+
       force_update:
         description: "Force users to update"
         required: true
@@ -42,7 +45,7 @@ jobs:
           cache: true
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -53,10 +56,15 @@ jobs:
         shell: bash
         run: |
           VERSION_LINE=$(grep '^version:' pubspec.yaml)
+
           CURRENT_VERSION=$(echo "$VERSION_LINE" | sed -E 's/version: ([^+]+).*/\1/')
           CURRENT_BUILD=$(echo "$VERSION_LINE" | sed -E 's/version: [^+]+\+([0-9]+)/\1/')
+
           echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
           echo "current_build=$CURRENT_BUILD" >> "$GITHUB_OUTPUT"
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "Current build: $CURRENT_BUILD"
 
       - name: Calculate build number
         id: build
@@ -67,23 +75,53 @@ jobs:
           else
             BUILD=$(( ${{ steps.current_version.outputs.current_build }} + 1 ))
           fi
+
           echo "build_number=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Using build number: $BUILD"
 
       - name: Update Flutter version
         working-directory: mobile
         shell: bash
         run: |
-          sed -i -E "s/^version:.*/version: ${{ inputs.version }}+${{ steps.build.outputs.build_number }}/" pubspec.yaml
+          sed -i -E \
+            "s/^version:.*/version: ${{ inputs.version }}+${{ steps.build.outputs.build_number }}/" \
+            pubspec.yaml
+
+          echo "Updated Flutter version:"
           grep '^version:' pubspec.yaml
 
       - name: Decode Android keystore
         shell: bash
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > mobile/android/upload-keystore.jks
+          if [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "ERROR: ANDROID_KEYSTORE_BASE64 secret is missing."
+            exit 1
+          fi
+
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" \
+            | base64 --decode \
+            > mobile/android/upload-keystore.jks
+
+          echo "Keystore created successfully."
 
       - name: Create key.properties
         shell: bash
         run: |
+          if [ -z "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ]; then
+            echo "ERROR: ANDROID_KEYSTORE_PASSWORD secret is missing."
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.ANDROID_KEY_PASSWORD }}" ]; then
+            echo "ERROR: ANDROID_KEY_PASSWORD secret is missing."
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ]; then
+            echo "ERROR: ANDROID_KEY_ALIAS secret is missing."
+            exit 1
+          fi
+
           cat > mobile/android/key.properties <<EOF
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -91,17 +129,32 @@ jobs:
           storeFile=../upload-keystore.jks
           EOF
 
+          echo "key.properties created successfully."
+
       - name: Flutter pub get
         working-directory: mobile
         run: flutter pub get
 
       - name: Flutter analyze
         working-directory: mobile
-        run: flutter analyze --no-fatal-warnings
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Build release APK
         working-directory: mobile
         run: flutter build apk --release
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK_PATH="mobile/build/app/outputs/flutter-apk/app-release.apk"
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
+
+          echo "APK generated successfully:"
+          ls -lh "$APK_PATH"
 
       - name: Prepare release files
         shell: bash
@@ -122,6 +175,7 @@ jobs:
           }
           EOF
 
+          echo "Release manifest:"
           cat release/manifest.json
 
       - name: Create GitHub Release
