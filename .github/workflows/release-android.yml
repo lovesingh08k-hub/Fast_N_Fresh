@@ -1,4 +1,4 @@
-name: Release Android APK
+name: Release Android APK + AAB
 
 on:
   workflow_dispatch:
@@ -30,38 +30,48 @@ permissions:
 
 jobs:
   release:
+    name: Build and Release Android
     runs-on: ubuntu-latest
 
     steps:
-      # --------------------------------------------------
+
+      # ==========================================================
       # CHECKOUT
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # FLUTTER
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # JAVA
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # READ CURRENT VERSION
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Read current version
         id: current_version
         working-directory: mobile
@@ -69,7 +79,12 @@ jobs:
         run: |
           set -e
 
-          VERSION_LINE=$(grep '^version:' pubspec.yaml)
+          VERSION_LINE=$(grep '^version:' pubspec.yaml || true)
+
+          if [ -z "$VERSION_LINE" ]; then
+            echo "ERROR: version not found in pubspec.yaml"
+            exit 1
+          fi
 
           CURRENT_VERSION=$(echo "$VERSION_LINE" | sed -E 's/version: ([^+]+).*/\1/')
           CURRENT_BUILD=$(echo "$VERSION_LINE" | sed -E 's/version: [^+]+\+([0-9]+)/\1/')
@@ -90,9 +105,11 @@ jobs:
           echo "Current version: $CURRENT_VERSION"
           echo "Current build: $CURRENT_BUILD"
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # CALCULATE BUILD NUMBER
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Calculate build number
         id: build
         shell: bash
@@ -114,9 +131,31 @@ jobs:
 
           echo "Using build number: $BUILD"
 
-      # --------------------------------------------------
+
+      # ==========================================================
+      # VALIDATE VERSION
+      # ==========================================================
+
+      - name: Validate version
+        shell: bash
+        run: |
+          set -e
+
+          VERSION="${{ inputs.version }}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Invalid version: $VERSION"
+            echo "Expected format: 1.5.33"
+            exit 1
+          fi
+
+          echo "Version validated: $VERSION"
+
+
+      # ==========================================================
       # UPDATE FLUTTER VERSION
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Update Flutter version
         working-directory: mobile
         shell: bash
@@ -130,9 +169,11 @@ jobs:
           echo "Updated Flutter version:"
           grep '^version:' pubspec.yaml
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # DECODE ANDROID KEYSTORE
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Decode Android keystore
         shell: bash
         run: |
@@ -147,8 +188,8 @@ jobs:
             | base64 --decode \
             > mobile/android/upload-keystore.jks
 
-          if [ ! -f "mobile/android/upload-keystore.jks" ]; then
-            echo "ERROR: Keystore file was not created."
+          if [ ! -s "mobile/android/upload-keystore.jks" ]; then
+            echo "ERROR: Keystore file was not created correctly."
             exit 1
           fi
 
@@ -156,9 +197,11 @@ jobs:
 
           ls -lh mobile/android/upload-keystore.jks
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # CREATE KEY.PROPERTIES
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Create key.properties
         shell: bash
         run: |
@@ -188,13 +231,15 @@ jobs:
 
           echo "key.properties created successfully."
 
-          echo "Configured keystore:"
+          echo "Signing configuration:"
           echo "storeFile=upload-keystore.jks"
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}"
 
-      # --------------------------------------------------
-      # VERIFY SIGNING FILES
-      # --------------------------------------------------
+
+      # ==========================================================
+      # VERIFY SIGNING CONFIGURATION
+      # ==========================================================
+
       - name: Verify Android signing configuration
         shell: bash
         run: |
@@ -218,60 +263,124 @@ jobs:
           echo "key.properties:"
           ls -lh mobile/android/key.properties
 
-          echo "Signing files verified successfully."
+          echo "Android signing configuration verified."
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # FLUTTER PUB GET
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Flutter pub get
         working-directory: mobile
         run: flutter pub get
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # FLUTTER ANALYZE
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Flutter analyze
         working-directory: mobile
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      # --------------------------------------------------
+
+      # ==========================================================
       # BUILD RELEASE APK
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Build release APK
         working-directory: mobile
-        run: flutter build apk --release
+        run: |
+          flutter build apk \
+            --release \
+            --build-name="${{ inputs.version }}" \
+            --build-number="${{ steps.build.outputs.build_number }}"
 
-      # --------------------------------------------------
-      # VERIFY APK
-      # --------------------------------------------------
-      - name: Verify APK
+
+      # ==========================================================
+      # BUILD RELEASE AAB
+      # ==========================================================
+
+      - name: Build release AAB
+        working-directory: mobile
+        run: |
+          flutter build appbundle \
+            --release \
+            --build-name="${{ inputs.version }}" \
+            --build-number="${{ steps.build.outputs.build_number }}"
+
+
+      # ==========================================================
+      # VERIFY APK + AAB
+      # ==========================================================
+
+      - name: Verify APK and AAB
         shell: bash
         run: |
           set -e
 
           APK_PATH="mobile/build/app/outputs/flutter-apk/app-release.apk"
+          AAB_PATH="mobile/build/app/outputs/bundle/release/app-release.aab"
+
+          echo "Checking APK..."
 
           if [ ! -f "$APK_PATH" ]; then
             echo "ERROR: APK was not generated."
             exit 1
           fi
 
-          echo "APK generated successfully:"
+          echo "Checking AAB..."
+
+          if [ ! -f "$AAB_PATH" ]; then
+            echo "ERROR: AAB was not generated."
+            exit 1
+          fi
+
+          echo ""
+          echo "APK:"
           ls -lh "$APK_PATH"
 
-      # --------------------------------------------------
-      # PREPARE RELEASE FILES
-      # --------------------------------------------------
+          echo ""
+          echo "AAB:"
+          ls -lh "$AAB_PATH"
+
+          echo ""
+          echo "Both Android release files generated successfully."
+
+
+      # ==========================================================
+      # PREPARE RELEASE DIRECTORY
+      # ==========================================================
+
       - name: Prepare release files
         shell: bash
         run: |
           set -e
 
+          rm -rf release
           mkdir -p release
 
           cp \
             mobile/build/app/outputs/flutter-apk/app-release.apk \
             release/fast-n-fresh.apk
+
+          cp \
+            mobile/build/app/outputs/bundle/release/app-release.aab \
+            release/fast-n-fresh.aab
+
+          echo "Release files prepared."
+
+          ls -lh release/
+
+
+      # ==========================================================
+      # CREATE UPDATE MANIFEST
+      # ==========================================================
+
+      - name: Create update manifest
+        shell: bash
+        run: |
+          set -e
 
           cat > release/manifest.json <<EOF
           {
@@ -279,20 +388,20 @@ jobs:
             "version": "${{ inputs.version }}",
             "buildNumber": ${{ steps.build.outputs.build_number }},
             "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/fast-n-fresh.apk",
+            "aabUrl": "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/fast-n-fresh.aab",
             "notes": "${{ inputs.release_notes }}",
             "forceUpdate": ${{ inputs.force_update }}
           }
           EOF
 
-          echo "Release manifest:"
+          echo "Generated manifest:"
           cat release/manifest.json
 
-          echo "Release files:"
-          ls -lh release/
 
-      # --------------------------------------------------
+      # ==========================================================
       # CREATE GITHUB RELEASE
-      # --------------------------------------------------
+      # ==========================================================
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -301,10 +410,54 @@ jobs:
           body: |
             ## Fast N Fresh ${{ inputs.version }}
 
-            Build: ${{ steps.build.outputs.build_number }}
+            **Version:** ${{ inputs.version }}
+
+            **Build:** ${{ steps.build.outputs.build_number }}
+
+            ### Android files
+
+            - `fast-n-fresh.apk` — Direct Android installation
+            - `fast-n-fresh.aab` — Google Play Store upload
+            - `manifest.json` — In-app update information
+
+            ### Release notes
 
             ${{ inputs.release_notes }}
+
           files: |
             release/fast-n-fresh.apk
+            release/fast-n-fresh.aab
             release/manifest.json
+
           generate_release_notes: false
+          fail_on_unmatched_files: true
+
+
+      # ==========================================================
+      # SUMMARY
+      # ==========================================================
+
+      - name: Release summary
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "       FAST N FRESH RELEASE SUCCESS"
+          echo "=========================================="
+          echo ""
+          echo "Version:     ${{ inputs.version }}"
+          echo "Build:       ${{ steps.build.outputs.build_number }}"
+          echo ""
+          echo "APK:         fast-n-fresh.apk"
+          echo "AAB:         fast-n-fresh.aab"
+          echo "Manifest:    manifest.json"
+          echo ""
+          echo "GitHub Release:"
+          echo "https://github.com/${{ github.repository }}/releases/tag/v${{ inputs.version }}"
+          echo ""
+          echo "APK download:"
+          echo "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/fast-n-fresh.apk"
+          echo ""
+          echo "AAB download:"
+          echo "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/fast-n-fresh.aab"
+          echo ""
+          echo "=========================================="
