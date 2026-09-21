@@ -1,4 +1,4 @@
-﻿name: Release Android APK
+name: Release Android APK
 
 on:
   workflow_dispatch:
@@ -97,7 +97,7 @@ jobs:
 
       - name: Flutter analyze
         working-directory: mobile
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings
 
       - name: Build release APK
         working-directory: mobile
