@@ -23,6 +23,7 @@ const connectDB = require('./config/db');
 const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { ImageAsset } = require('./models');
+const { publicMenuUrl } = require('./utils/publicUrls');
 
 const app = express();
 
@@ -53,7 +54,14 @@ const apiLimiter = rateLimit({
 // crossOriginResourcePolicy relaxed so product images can be loaded by the
 // Flutter app (a different origin) — everything else stays locked down.
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({
+  limit: '2mb',
+  // Payment webhooks are signed over the exact bytes sent, so keep them for
+  // provider.verifyWebhook (see paymentWebhookController).
+  verify: (req, res, buf) => {
+    if (req.originalUrl.startsWith('/api/public/payments/webhook')) req.rawBody = buf;
+  },
+}));
 app.use(mongoSanitize());
 app.use('/api', apiLimiter);
 
@@ -61,6 +69,17 @@ const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+
+// The customer QR menu is hosted separately (GitHub Pages) and calls this
+// API from the browser, so its origin must always be allowed — otherwise an
+// empty CORS_ORIGIN in production silently breaks every customer's menu.
+const allowedCorsOrigins = [...configuredCorsOrigins];
+try {
+  const menuOrigin = new URL(publicMenuUrl(1)).origin;
+  if (!allowedCorsOrigins.includes(menuOrigin)) allowedCorsOrigins.push(menuOrigin);
+} catch (_) {
+  // No usable menu URL configured; nothing extra to allow.
+}
 const isProduction = process.env.NODE_ENV === 'production';
 
 const corsMiddleware = cors({
@@ -69,7 +88,7 @@ const corsMiddleware = cors({
     // allowed. Cross-origin browser access is deny-by-default in production
     // unless explicitly listed in CORS_ORIGIN.
     if (!origin) return callback(null, true);
-    if (configuredCorsOrigins.includes('*') || configuredCorsOrigins.includes(origin)) {
+    if (allowedCorsOrigins.includes('*') || allowedCorsOrigins.includes(origin)) {
       return callback(null, true);
     }
     if (!isProduction && configuredCorsOrigins.length === 0) return callback(null, true);
@@ -160,6 +179,13 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 async function start() {
+  // Without a signing secret every login would fail with a 500, so refuse to
+  // start instead of running in a broken state.
+  if (!process.env.JWT_SECRET) {
+    console.error('[CONFIG] JWT_SECRET is not set. Refusing to start.');
+    process.exit(1);
+  }
+
   // Bind the HTTP port before MongoDB connects so Render/load balancers can
   // reach /health and observe a truthful 503 while the database is starting.
   const server = app.listen(PORT, () => {

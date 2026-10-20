@@ -10,7 +10,7 @@ const listCategories = asyncHandler(async (req, res) => {
 
 const createCategory = asyncHandler(async (req, res) => {
   const { name, sortOrder } = req.body;
-  if (!name || !name.trim()) throw new ApiError(400, 'Category name is required.');
+  if (typeof name !== 'string' || !name.trim()) throw new ApiError(400, 'Category name is required.');
   const category = await Category.create({ name: name.trim(), sortOrder: sortOrder || 0 });
   res.status(201).json({ success: true, data: category });
 });
@@ -20,7 +20,7 @@ const updateCategory = asyncHandler(async (req, res) => {
   const category = await Category.findById(req.params.id);
   if (!category) throw new ApiError(404, 'Category not found.');
 
-  if (name !== undefined) category.name = name.trim();
+  if (name !== undefined) category.name = String(name).trim();
   if (sortOrder !== undefined) category.sortOrder = sortOrder;
   if (status !== undefined) category.status = status;
   await category.save();

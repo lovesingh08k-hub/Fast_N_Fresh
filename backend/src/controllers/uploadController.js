@@ -11,18 +11,21 @@ const uploadProductImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'No image file was uploaded.');
   }
 
-  const data = await fs.readFile(req.file.path);
-  if (data.length > 1024 * 1024) {
+  let asset;
+  try {
+    const data = await fs.readFile(req.file.path);
+    if (data.length > 1024 * 1024) {
+      throw new ApiError(400, 'Image is too large after compression.');
+    }
+
+    asset = await ImageAsset.create({
+      data,
+      contentType: req.file.mimetype,
+    });
+  } finally {
+    // The temp file is never needed once read, whether or not saving worked.
     await fs.unlink(req.file.path).catch(() => {});
-    throw new ApiError(400, 'Image is too large after compression.');
   }
-
-  const asset = await ImageAsset.create({
-    data,
-    contentType: req.file.mimetype,
-  });
-
-  await fs.unlink(req.file.path).catch(() => {});
 
   res.status(201).json({
     success: true,

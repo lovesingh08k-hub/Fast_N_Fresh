@@ -20,6 +20,11 @@ const listProducts = asyncHandler(async (req, res) => {
   const filter = { isDeleted: false };
   if (category) filter.category = category;
   if (status) filter.status = status;
+  if (lowStock === 'true') {
+    // Filtered in the query (not after paging) so totals and pages stay right.
+    filter.trackInventory = true;
+    filter.$expr = { $lte: ['$stock', '$lowStockThreshold'] };
+  }
 
   const safeSearch = typeof search === 'string' ? search.trim() : '';
   if (safeSearch) {
@@ -35,15 +40,11 @@ const listProducts = asyncHandler(async (req, res) => {
     ];
   }
 
-  let products = await Product.find(filter)
+  const products = await Product.find(filter)
     .populate('category', 'name')
     .sort({ name: 1 })
     .skip((page - 1) * limit)
     .limit(limit);
-
-  if (lowStock === 'true') {
-    products = products.filter((p) => p.trackInventory && p.stock <= p.lowStockThreshold);
-  }
 
   const total = await Product.countDocuments(filter);
 
@@ -63,9 +64,14 @@ const getProduct = asyncHandler(async (req, res) => {
 const createProduct = asyncHandler(async (req, res) => {
   const { name, category, sellingPrice, costPrice, stock, lowStockThreshold, trackInventory, status, imageUrl, recipe } = req.body;
 
-  if (!name || !name.trim()) throw new ApiError(400, 'Product name is required.');
+  if (typeof name !== 'string' || !name.trim()) throw new ApiError(400, 'Product name is required.');
   if (!category) throw new ApiError(400, 'Category is required.');
-  if (sellingPrice === undefined || sellingPrice < 0) throw new ApiError(400, 'A valid selling price is required.');
+  if (sellingPrice === undefined || sellingPrice === null || !Number.isFinite(Number(sellingPrice)) || Number(sellingPrice) < 0) {
+    throw new ApiError(400, 'A valid selling price is required.');
+  }
+  if (stock !== undefined && stock !== null && (!Number.isFinite(Number(stock)) || Number(stock) < 0)) {
+    throw new ApiError(400, 'Opening stock cannot be negative.');
+  }
 
   const product = await Product.create({
     name: name.trim(),

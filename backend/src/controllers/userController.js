@@ -43,7 +43,7 @@ const listUsers = asyncHandler(async (req, res) => {
 const createUser = asyncHandler(async (req, res) => {
   const { name, phone, username, password, role } = req.body;
 
-  if (!name || !phone || !username || !password) {
+  if ([name, phone, username, password].some((v) => typeof v !== 'string' || !v.trim())) {
     throw new ApiError(400, 'Name, phone, username and password are all required.');
   }
   if (!['staff', 'manager'].includes(role)) {

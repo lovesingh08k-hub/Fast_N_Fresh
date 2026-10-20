@@ -1,6 +1,6 @@
 const { Order, Product, Customer } = require('../models');
 const { asyncHandler } = require('../utils/apiError');
-const { startOfDay, endOfDay, daysAgo, startOfWeek, startOfMonth } = require('../utils/dateRanges');
+const { BUSINESS_TIME_ZONE, startOfDay, endOfDay, daysAgo, startOfWeek, startOfMonth } = require('../utils/dateRanges');
 
 function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -27,7 +27,7 @@ const getDashboard = asyncHandler(async (req, res) => {
   const todayEnd = endOfDay(now);
 
   // Completed orders drive sales/payment totals.
-  const baseFilter = { status: 'completed' };
+  const baseFilter = { status: 'completed', preLaunchTestData: { $ne: true } };
   if (req.user.role === 'staff') baseFilter.staff = req.user._id;
 
   // The dashboard's Orders card represents orders actually placed today,
@@ -37,6 +37,7 @@ const getDashboard = asyncHandler(async (req, res) => {
   // QR orders even though those orders have no staff assigned yet.
   const placedTodayFilter = {
     status: { $ne: 'voided' },
+    preLaunchTestData: { $ne: true },
     createdAt: { $gte: todayStart, $lte: todayEnd },
   };
   if (req.user.role === 'staff') {
@@ -48,7 +49,7 @@ const getDashboard = asyncHandler(async (req, res) => {
 
   // Recent orders should include open QR orders too, otherwise the dashboard
   // looks unchanged until the customer reaches checkout.
-  const recentOrdersFilter = { status: { $ne: 'voided' } };
+  const recentOrdersFilter = { status: { $ne: 'voided' }, preLaunchTestData: { $ne: true } };
   if (req.user.role === 'staff') {
     recentOrdersFilter.$or = [
       { staff: req.user._id },
@@ -114,7 +115,7 @@ const getDashboard = asyncHandler(async (req, res) => {
 // GET /api/dashboard/sales-overview — Today / Yesterday / Week / Month + daily graph data
 const getSalesOverview = asyncHandler(async (req, res) => {
   const now = new Date();
-  const baseFilter = { status: 'completed' };
+  const baseFilter = { status: 'completed', preLaunchTestData: { $ne: true } };
   if (req.user.role === 'staff') baseFilter.staff = req.user._id;
 
   const yesterday = daysAgo(1);
@@ -125,10 +126,10 @@ const getSalesOverview = asyncHandler(async (req, res) => {
     Order.find({ ...baseFilter, createdAt: { $gte: startOfWeek(now) } }),
     Order.find({ ...baseFilter, createdAt: { $gte: startOfMonth(now) } }),
     Order.aggregate([
-      { $match: { ...baseFilter, createdAt: { $gte: daysAgo(13) } } },
+      { $match: { ...baseFilter, createdAt: { $gte: startOfDay(daysAgo(13)) } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: BUSINESS_TIME_ZONE } },
           sales: { $sum: '$grandTotal' },
           orders: { $sum: 1 },
         },

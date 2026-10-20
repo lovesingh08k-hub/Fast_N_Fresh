@@ -76,10 +76,14 @@ const getTable = asyncHandler(async (req, res) => {
 
 const createTable = asyncHandler(async (req, res) => {
   const { name, capacity, number } = req.body;
-  if (!name || !name.trim()) throw new ApiError(400, 'Table name/number is required.');
+  if (typeof name !== 'string' || !name.trim()) throw new ApiError(400, 'Table name/number is required.');
 
   let qrNumber = number;
   if (qrNumber !== undefined && qrNumber !== null && qrNumber !== '') {
+    qrNumber = Number(qrNumber);
+    if (!Number.isInteger(qrNumber) || qrNumber < 1) {
+      throw new ApiError(400, 'Table number must be a positive whole number.');
+    }
     const exists = await Table.findOne({ number: qrNumber });
     if (exists) throw new ApiError(409, `Table number ${qrNumber} is already in use.`);
   } else {
@@ -95,7 +99,7 @@ const updateTable = asyncHandler(async (req, res) => {
   if (!table) throw new ApiError(404, 'Table not found.');
 
   const { name, capacity, status, number } = req.body;
-  if (name !== undefined) table.name = name.trim();
+  if (name !== undefined) table.name = String(name).trim();
   if (capacity !== undefined) table.capacity = capacity;
   if (number !== undefined) {
     if (number === null || number === '') {
@@ -129,7 +133,7 @@ const deleteTable = asyncHandler(async (req, res) => {
   const table = await Table.findById(req.params.id);
   if (!table) throw new ApiError(404, 'Table not found.');
 
-  const hasOpenOrders = await Order.exists({ table: table._id, status: 'open' });
+  const hasOpenOrders = await Order.exists({ table: table._id, status: { $in: ['open', 'preparing', 'ready'] } });
   if (hasOpenOrders) {
     throw new ApiError(409, 'Cannot deactivate a table with active (unpaid) orders on it.');
   }

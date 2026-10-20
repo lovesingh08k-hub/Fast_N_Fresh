@@ -2,6 +2,14 @@ const { Customer, CreditTransaction, Order } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 const mongoose = require('mongoose');
 
+function round2(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // GET /api/customers?search=&hasDue=true&page=&limit=
 const listCustomers = asyncHandler(async (req, res) => {
   const { search, hasDue } = req.query;
@@ -11,9 +19,12 @@ const listCustomers = asyncHandler(async (req, res) => {
   const filter = { status: 'active' };
   if (hasDue === 'true') filter.outstandingBalance = { $gt: 0 };
   if (search) {
+    // User text is matched literally; unescaped it could be an invalid or
+    // catastrophically slow regex.
+    const pattern = escapeRegex(String(search).trim());
     filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { phone: { $regex: search, $options: 'i' } },
+      { name: { $regex: pattern, $options: 'i' } },
+      { phone: { $regex: pattern, $options: 'i' } },
     ];
   }
 
@@ -52,8 +63,8 @@ const getCustomer = asyncHandler(async (req, res) => {
 
 const createCustomer = asyncHandler(async (req, res) => {
   const { name, phone, address, notes } = req.body;
-  if (!name || !name.trim()) throw new ApiError(400, 'Customer name is required.');
-  if (!phone || !phone.trim()) throw new ApiError(400, 'Phone number is required.');
+  if (typeof name !== 'string' || !name.trim()) throw new ApiError(400, 'Customer name is required.');
+  if (typeof phone !== 'string' || !phone.trim()) throw new ApiError(400, 'Phone number is required.');
 
   const customer = await Customer.create({
     name: name.trim(),
@@ -95,9 +106,9 @@ const deleteCustomer = asyncHandler(async (req, res) => {
 // Records a UDHAR payment and atomically decreases the customer's outstanding balance.
 const recordPayment = asyncHandler(async (req, res) => {
   const { amount, method, note, clientRequestId } = req.body;
-  const paymentAmount = Number(amount);
+  const paymentAmount = round2(Number(amount));
 
-  if (!paymentAmount || paymentAmount <= 0) {
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
     throw new ApiError(400, 'A valid payment amount is required.');
   }
   if (!['CASH', 'UPI'].includes(method)) {
@@ -131,8 +142,8 @@ const recordPayment = asyncHandler(async (req, res) => {
         throw new ApiError(400, `Payment (₹${paymentAmount}) exceeds outstanding due (₹${customer.outstandingBalance}).`);
       }
 
-      customer.outstandingBalance -= paymentAmount;
-      customer.totalPaid += paymentAmount;
+      customer.outstandingBalance = round2(customer.outstandingBalance - paymentAmount);
+      customer.totalPaid = round2(customer.totalPaid + paymentAmount);
       await customer.save({ session });
 
       const [transaction] = await CreditTransaction.create(

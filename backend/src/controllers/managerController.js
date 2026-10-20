@@ -1,13 +1,13 @@
 const mongoose = require('mongoose');
 const { Order, Expense, Product, InventoryTransaction, AuditLog, CashMovement, DayClose, Wastage, Purchase, RefundTransaction } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
+const { businessDate: istBusinessDate } = require('../utils/dateRanges');
 
 function businessDate(value = new Date()) {
-  const d = new Date(value);
-  const utc = d.getTime() + d.getTimezoneOffset() * 60000;
-  return new Date(utc + 330 * 60000).toISOString().slice(0, 10);
+  return istBusinessDate(value);
 }
 function dayBounds(dateStr) {
+  if (typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) throw new ApiError(400, 'Date must be in YYYY-MM-DD format.');
   const [y,m,d] = dateStr.split('-').map(Number);
   const start = new Date(Date.UTC(y,m-1,d,0,0,0) - 330*60000);
   const end = new Date(Date.UTC(y,m-1,d,23,59,59,999) - 330*60000);
@@ -38,7 +38,7 @@ const getDaySummary = asyncHandler(async (req,res)=>{
 });
 
 const openDay = asyncHandler(async(req,res)=>{
-  const date=req.body.businessDate||businessDate();
+  const date=req.body.businessDate||businessDate(); dayBounds(date);
   let day=await DayClose.findOne({businessDate:date});
   if(day?.status==='closed') throw new ApiError(409,'This business day is already closed.');
   const isNew=!day;
@@ -52,7 +52,7 @@ const closeDay = asyncHandler(async(req,res)=>{
   const date=req.body.businessDate||businessDate(); const {start,end}=dayBounds(date);
   const day=await DayClose.findOne({businessDate:date}); if(!day) throw new ApiError(400,'Open the business day first.');
   if(day.status==='closed') return res.json({success:true,data:day});
-  const openCount = await Order.countDocuments({createdAt:{$gte:start,$lte:end},status:'open'});
+  const openCount = await Order.countDocuments({createdAt:{$gte:start,$lte:end},status:{$in:['open','preparing','ready']}});
   if (openCount > 0) throw new ApiError(409, `Cannot close the day while ${openCount} unpaid/open order(s) remain.`);
   const [orders,expenses,movements,refunds]=await Promise.all([
     Order.find({createdAt:{$gte:start,$lte:end},status:'completed'}), Expense.find({date:{$gte:start,$lte:end}}), CashMovement.find({businessDate:date}), RefundTransaction.find({processedAt:{$gte:start,$lte:end}})
@@ -71,7 +71,7 @@ const closeDay = asyncHandler(async(req,res)=>{
 const cashMovement = asyncHandler(async(req,res)=>{
   const type=req.body.type; if(!['IN','OUT'].includes(type)) throw new ApiError(400,'Cash movement type must be IN or OUT.');
   const amount=n(req.body.amount); if(amount<=0) throw new ApiError(400,'Amount must be greater than zero.');
-  const date=req.body.businessDate||businessDate(); const day=await DayClose.findOne({businessDate:date}); if(day?.status==='closed') throw new ApiError(409,'Business day is closed.');
+  const date=req.body.businessDate||businessDate(); dayBounds(date); const day=await DayClose.findOne({businessDate:date}); if(day?.status==='closed') throw new ApiError(409,'Business day is closed.');
   const item=await CashMovement.create({type,amount,reason:req.body.reason,reference:req.body.reference,recordedBy:req.user._id,businessDate:date}); await log(req,'CASH_MOVEMENT','CashMovement',item._id,{type,amount}); res.status(201).json({success:true,data:item});
 });
 

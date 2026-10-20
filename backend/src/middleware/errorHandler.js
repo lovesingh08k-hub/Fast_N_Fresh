@@ -19,6 +19,13 @@ function errorHandler(err, req, res, next) {
     const field = Object.keys(err.keyPattern || {})[0] || 'field';
     message = `A record with this ${field} already exists.`;
   }
+  if (err.name === 'MulterError') {
+    statusCode = 400;
+    message = err.code === 'LIMIT_FILE_SIZE' ? 'Image is too large. Maximum size is 5MB.' : err.message;
+  }
+  if (err.message === 'Origin not allowed by CORS') {
+    statusCode = 403;
+  }
   if (err.name === 'ValidationError' && !statusCode) {
     statusCode = 400;
     message = Object.values(err.errors)

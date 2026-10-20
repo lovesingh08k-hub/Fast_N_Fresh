@@ -1,5 +1,5 @@
 const { Order, User, CreditTransaction } = require('../models');
-const { asyncHandler } = require('../utils/apiError');
+const { ApiError, asyncHandler } = require('../utils/apiError');
 
 function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -82,6 +82,7 @@ const getStaffAttendanceDetail = asyncHandler(async (req, res) => {
   const range = dateRangeFilter(req.query);
 
   const staff = await User.findById(staffId).select('name role');
+  if (!staff) throw new ApiError(404, 'Employee not found.');
 
   const orders = await Order.find({ ...range, staff: staffId, status: 'completed' })
     .populate('customer', 'name')

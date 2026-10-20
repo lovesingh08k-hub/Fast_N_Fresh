@@ -65,6 +65,9 @@ async function finalizeVerifiedPayment(transactionId, providerData = {}) {
       );
 
       // QR online payments must enter the same inventory pipeline as staff bills.
+      // The customer has already paid, so a stock shortfall must not abort the
+      // order (that would take the money and create nothing). Record the sale
+      // anyway; stock going negative flags the discrepancy to staff.
       for (const line of orderItems) {
         const product = await Product.findOne({ _id: line.product, isDeleted: false, trackInventory: true }).session(session);
         if (!product) continue;
@@ -72,14 +75,15 @@ async function finalizeVerifiedPayment(transactionId, providerData = {}) {
         if (recipe.length) {
           for (const recipeLine of recipe) {
             const needed = Number(recipeLine.quantity) * line.quantity;
-            const updated = await Product.findOneAndUpdate({ _id: recipeLine.ingredient, isDeleted: false, trackInventory: true, stock: { $gte: needed } }, { $inc: { stock: -needed } }, { new: true, session });
-            if (!updated) throw new Error(`Insufficient ingredient for ${product.name}.`);
-            await InventoryTransaction.create([{ product: updated._id, type: 'SALE', quantity: -needed, stockAfter: updated.stock, reason: `QR recipe sale #${order.orderNumber}`, order: order._id }], { session });
+            const updated = await Product.findOneAndUpdate({ _id: recipeLine.ingredient, isDeleted: false, trackInventory: true }, { $inc: { stock: -needed } }, { new: true, session });
+            if (!updated) continue;
+            const shortfall = updated.stock < 0 ? ' (stock shortfall)' : '';
+            await InventoryTransaction.create([{ product: updated._id, type: 'SALE', quantity: -needed, stockAfter: updated.stock, reason: `QR recipe sale #${order.orderNumber}${shortfall}`, order: order._id }], { session });
           }
         } else {
-          const updated = await Product.findOneAndUpdate({ _id: product._id, stock: { $gte: line.quantity } }, { $inc: { stock: -line.quantity } }, { new: true, session });
-          if (!updated) throw new Error(`Insufficient stock for ${product.name}.`);
-          await InventoryTransaction.create([{ product: updated._id, type: 'SALE', quantity: -line.quantity, stockAfter: updated.stock, reason: `QR sale #${order.orderNumber}`, order: order._id }], { session });
+          const updated = await Product.findOneAndUpdate({ _id: product._id }, { $inc: { stock: -line.quantity } }, { new: true, session });
+          const shortfall = updated.stock < 0 ? ' (stock shortfall)' : '';
+          await InventoryTransaction.create([{ product: updated._id, type: 'SALE', quantity: -line.quantity, stockAfter: updated.stock, reason: `QR sale #${order.orderNumber}${shortfall}`, order: order._id }], { session });
         }
       }
 

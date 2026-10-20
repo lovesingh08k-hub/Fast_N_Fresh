@@ -6,7 +6,7 @@ function round2(n) {
 }
 
 function parseRange(query) {
-  const filter = { status: 'completed' };
+  const filter = { status: 'completed', preLaunchTestData: { $ne: true } };
   if (query.from || query.to) {
     filter.createdAt = {};
     if (query.from) filter.createdAt.$gte = new Date(query.from);

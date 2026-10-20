@@ -1,5 +1,18 @@
 const { Expense, DayClose } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
+const { businessDate } = require('../utils/dateRanges');
+
+function parseExpenseDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) throw new ApiError(400, 'A valid expense date is required.');
+  return date;
+}
+
+// Closed days have reconciled cash totals, so their expenses are frozen.
+async function assertDayOpenFor(date, message) {
+  const closedDay = await DayClose.findOne({ businessDate: businessDate(date), status: 'closed' });
+  if (closedDay) throw new ApiError(409, message);
+}
 
 const listExpenses = asyncHandler(async (req, res) => {
   const { from, to, category } = req.query;
@@ -26,18 +39,17 @@ const listExpenses = asyncHandler(async (req, res) => {
 
 const createExpense = asyncHandler(async (req, res) => {
   const { title, category, amount, date, notes, paymentMethod = 'CASH' } = req.body;
-  const expenseDate = date ? new Date(date) : new Date();
-  const dayDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(expenseDate);
-  const closedDay = await DayClose.findOne({ businessDate: dayDate, status: 'closed' });
-  if (closedDay) throw new ApiError(409, 'Business day is closed. Expenses cannot be added.');
+  const expenseDate = parseExpenseDate(date);
+  await assertDayOpenFor(expenseDate, 'Business day is closed. Expenses cannot be added.');
   if (!['CASH', 'UPI', 'BANK', 'CARD'].includes(paymentMethod)) throw new ApiError(400, 'Invalid expense payment method.');
-  if (!title || !title.trim()) throw new ApiError(400, 'Expense title is required.');
-  if (!amount || amount <= 0) throw new ApiError(400, 'A valid amount is required.');
+  if (typeof title !== 'string' || !title.trim()) throw new ApiError(400, 'Expense title is required.');
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) throw new ApiError(400, 'A valid amount is required.');
 
   const expense = await Expense.create({
     title: title.trim(),
     category: category || 'Other',
-    amount,
+    amount: Math.round(value * 100) / 100,
     date: expenseDate,
     paymentMethod,
     notes,
@@ -51,9 +63,16 @@ const updateExpense = asyncHandler(async (req, res) => {
   const expense = await Expense.findById(req.params.id);
   if (!expense) throw new ApiError(404, 'Expense not found.');
 
-  const originalDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(expense.date);
-  const day = await DayClose.findOne({ businessDate: originalDay, status: 'closed' });
-  if (day) throw new ApiError(409, 'Business day is closed. Expense cannot be changed.');
+  await assertDayOpenFor(expense.date, 'Business day is closed. Expense cannot be changed.');
+  if (req.body.date !== undefined) {
+    // Moving an expense into a closed day would change that day's totals too.
+    await assertDayOpenFor(parseExpenseDate(req.body.date), 'The target business day is closed. Expense cannot be moved there.');
+  }
+  if (req.body.amount !== undefined) {
+    const value = Number(req.body.amount);
+    if (!Number.isFinite(value) || value <= 0) throw new ApiError(400, 'A valid amount is required.');
+  }
+
   const editable = ['title', 'category', 'amount', 'date', 'notes', 'paymentMethod'];
   editable.forEach((field) => {
     if (req.body[field] !== undefined) expense[field] = req.body[field];
@@ -64,8 +83,10 @@ const updateExpense = asyncHandler(async (req, res) => {
 });
 
 const deleteExpense = asyncHandler(async (req, res) => {
-  const expense = await Expense.findByIdAndDelete(req.params.id);
+  const expense = await Expense.findById(req.params.id);
   if (!expense) throw new ApiError(404, 'Expense not found.');
+  await assertDayOpenFor(expense.date, 'Business day is closed. Expense cannot be deleted.');
+  await expense.deleteOne();
   res.json({ success: true, message: 'Expense deleted.' });
 });
 

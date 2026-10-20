@@ -7,7 +7,7 @@ const { signToken } = require('../utils/jwt');
 const login = asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
 
-  if (!identifier || !password) {
+  if (!identifier || !password || typeof identifier !== 'string' || typeof password !== 'string') {
     throw new ApiError(400, 'Username/phone and password are required.');
   }
 
@@ -24,17 +24,19 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Invalid credentials.');
   }
 
+  const isMatch = await user.comparePassword(password);
+
+  if (!isMatch) {
+    throw new ApiError(401, 'Invalid credentials.');
+  }
+
+  // Checked only after the password, so the response can't be used to
+  // discover which usernames exist.
   if (user.status !== 'active') {
     throw new ApiError(
       403,
       'Your account has been deactivated. Contact the admin.',
     );
-  }
-
-  const isMatch = await user.comparePassword(password);
-
-  if (!isMatch) {
-    throw new ApiError(401, 'Invalid credentials.');
   }
 
   user.lastLoginAt = new Date();
@@ -69,6 +71,10 @@ const changePassword = asyncHandler(async (req, res) => {
       400,
       'Current and new password are required.',
     );
+  }
+
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    throw new ApiError(400, 'Current and new password are required.');
   }
 
   if (newPassword.length < 6) {
@@ -129,11 +135,18 @@ const logoutAllDevices = asyncHandler(async (req, res) => {
 // just backgrounded. A user can be signed in on more than one device, so
 // tokens are stored as a de-duplicated array rather than a single field.
 const registerPushToken = asyncHandler(async (req, res) => {
-  const token = (req.body && req.body.token || '').trim();
+  const token = String((req.body && req.body.token) || '').trim();
 
   if (!token) {
     throw new ApiError(400, 'A push token is required.');
   }
+
+  // A device token belongs to whoever is signed in on that phone now. Drop it
+  // from any previous user so they stop receiving this device's pushes.
+  await User.updateMany(
+    { _id: { $ne: req.user._id }, fcmTokens: token },
+    { $pull: { fcmTokens: token } },
+  );
 
   await User.updateOne(
     { _id: req.user._id },
@@ -147,7 +160,7 @@ const registerPushToken = asyncHandler(async (req, res) => {
 // Called on logout so a signed-out device stops receiving pushes meant
 // for whoever is signed in next on that phone.
 const unregisterPushToken = asyncHandler(async (req, res) => {
-  const token = (req.body && req.body.token || '').trim();
+  const token = String((req.body && req.body.token) || '').trim();
 
   if (!token) {
     throw new ApiError(400, 'A push token is required.');

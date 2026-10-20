@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const {
   Order,
+  User,
   Product,
   Customer,
   Table,
@@ -194,6 +195,10 @@ async function priceAndValidate({
       credit: round2(Number(creditPortion) || 0),
     };
 
+    if (Object.values(paymentBreakdown).some((v) => !Number.isFinite(v) || v < 0)) {
+      throw new ApiError(400, 'Mixed payment portions must be zero or positive amounts.');
+    }
+
     const sum = round2(
       paymentBreakdown.cash +
         paymentBreakdown.upi +
@@ -212,9 +217,15 @@ async function priceAndValidate({
 
   if (
     paymentMethod === 'CASH' &&
-    amountReceived !== undefined
+    amountReceived !== undefined &&
+    amountReceived !== null &&
+    amountReceived !== ''
   ) {
     const received = Number(amountReceived);
+
+    if (!Number.isFinite(received)) {
+      throw new ApiError(400, 'Amount received must be a valid number.');
+    }
 
     if (received < grandTotal) {
       throw new ApiError(
@@ -389,12 +400,21 @@ function preserveKotSentQuantities(previousItems, nextItems) {
   for (const line of previousItems || []) {
     sentByKey.set(orderLineKey(line), Number(line.kotSentQuantity || 0));
   }
+  const nextKeys = new Set();
   for (const line of nextItems) {
-    const previousSent = sentByKey.get(orderLineKey(line)) || 0;
+    const key = orderLineKey(line);
+    nextKeys.add(key);
+    const previousSent = sentByKey.get(key) || 0;
     if (previousSent > line.quantity) {
       throw new ApiError(409, `Cannot reduce ${line.name} below the quantity already sent to kitchen.`);
     }
     line.kotSentQuantity = previousSent;
+  }
+  // Removing a line entirely is the same as reducing it to zero.
+  for (const line of previousItems || []) {
+    if (Number(line.kotSentQuantity || 0) > 0 && !nextKeys.has(orderLineKey(line))) {
+      throw new ApiError(409, `Cannot remove ${line.name}; it has already been sent to kitchen.`);
+    }
   }
 }
 
@@ -695,6 +715,10 @@ const updateOpenOrderItems =
       customerId,
     } = req.body;
 
+    if (!Array.isArray(items)) {
+      throw new ApiError(400, 'items must be an array.');
+    }
+
     const order =
       await Order.findById(req.params.id);
 
@@ -821,18 +845,30 @@ const updateOpenOrderItems =
       );
 
     preserveKotSentQuantities(order.items, orderItems);
+
+    // Same tax rule as checkout (priceAndValidate), so the running total on
+    // an open tab matches what the final bill will charge.
+    const settings = await BusinessSettings.getSettings();
+    const taxableAmount = round2(subtotal - safeDiscount);
+    const tax = settings.taxEnabled
+      ? round2((taxableAmount * settings.taxPercent) / 100)
+      : 0;
+
     order.items = orderItems;
     order.subtotal = subtotal;
     order.discount = safeDiscount;
-    order.grandTotal = round2(
-      subtotal - safeDiscount
-    );
+    order.tax = tax;
+    order.grandTotal = round2(taxableAmount + tax);
 
     if (notes !== undefined) {
       order.notes = notes;
     }
 
     if (customerId !== undefined) {
+      if (customerId) {
+        const customer = await Customer.findById(customerId).select('_id');
+        if (!customer) throw new ApiError(404, 'Selected customer not found.');
+      }
       order.customer =
         customerId || undefined;
     }
@@ -1176,8 +1212,17 @@ const cancelOpenOrder =
       );
     }
 
+    // A QR order can be paid online before staff check it out. Cancelling it
+    // must not silently drop that payment: keep it marked paid and queue a
+    // refund so it shows up in the refunds workflow.
+    const wasPaid = order.paymentStatus === 'paid';
     order.status = 'voided';
-    order.paymentStatus = 'cancelled';
+    if (wasPaid) {
+      order.refundStatus = 'pending';
+      order.refundedAmount = 0;
+    } else {
+      order.paymentStatus = 'cancelled';
+    }
     order.voidedAt = new Date();
     order.voidedBy =
       req.user._id;
@@ -1230,17 +1275,25 @@ const reassignAttendee =
       );
     }
 
+    const assignee = await User.findOne({ _id: userId, status: 'active' }).select('_id');
+    if (!assignee) {
+      throw new ApiError(404, 'Selected employee not found or inactive.');
+    }
+
     const now = new Date();
 
     if (order.staff) {
+      // The current attendee's stint began at the previous handover, or at
+      // order creation if there has been none.
+      const lastHandover = order.attendedByHistory[order.attendedByHistory.length - 1];
       order.attendedByHistory.push({
         user: order.staff,
-        from: order.createdAt,
+        from: lastHandover?.to || order.createdAt,
         to: now,
       });
     }
 
-    order.staff = userId;
+    order.staff = assignee._id;
 
     await order.save();
 
@@ -1382,8 +1435,13 @@ const listOrders =
     // table orders (orderSource 'pos', status 'open') were previously
     // excluded here (only 'qr' open orders were allowed through), so a
     // just-opened table tab would not appear on the Orders page at all.
-    if (status) {
-      filter.status = status;
+    // `status=active` means every unbilled order (open, preparing, ready),
+    // regardless of age: used by the table grid so a tab opened before
+    // midnight or beyond the first page of results never disappears.
+    if (status === 'active') {
+      filter.status = { $in: ['open', 'preparing', 'ready'] };
+    } else if (status) {
+      filter.status = String(status);
     }
 
     // Staff can see their own orders plus unattended QR orders.
@@ -1442,10 +1500,21 @@ const listOrders =
         $or: [{ name: searchRegex }, { phone: searchRegex }],
       }).select('_id').lean();
 
-      filter.$or = [
-        ...(Number.isFinite(asNumber) ? [{ orderNumber: asNumber }] : []),
+      const searchOr = [
+        ...(term && Number.isFinite(asNumber) ? [{ orderNumber: asNumber }] : []),
         ...(matchingCustomers.length ? [{ customer: { $in: matchingCustomers.map((c) => c._id) } }] : []),
       ];
+      // AND the search with any existing $or (the staff visibility rule) so
+      // searching can never widen what a staff member is allowed to see.
+      // An empty $or is invalid in MongoDB, so "no matches" is expressed as a
+      // condition no order can satisfy.
+      const searchCondition = searchOr.length ? { $or: searchOr } : { _id: { $exists: false } };
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, searchCondition];
+        delete filter.$or;
+      } else {
+        Object.assign(filter, searchCondition);
+      }
     }
 
     const orders =
@@ -1676,17 +1745,21 @@ const refundOrder = asyncHandler(async (req, res) => {
   if (!order) throw new ApiError(404, 'Order not found.');
   if (order.status !== 'voided') throw new ApiError(409, 'Void the bill before recording a refund.');
   if (order.refundStatus === 'refunded') throw new ApiError(409, 'Refund is already recorded.');
+  // Only real money (cash/UPI) can be refunded. The credit (UDHAR) portion was
+  // never paid, and voiding already reversed it on the customer's ledger.
   const paidCash = round2(order.paymentBreakdown?.cash || 0);
   const paidUpi = round2(order.paymentBreakdown?.upi || 0);
-  const paidCredit = round2(order.paymentBreakdown?.credit || 0);
-  const paidAmount = round2(paidCash + paidUpi + paidCredit);
+  const paidAmount = round2(paidCash + paidUpi);
+  if (order.refundStatus === 'not_required' || paidAmount <= 0) {
+    throw new ApiError(409, 'No cash or UPI payment on this bill needs a refund.');
+  }
   const amount = round2(Number(req.body.amount ?? paidAmount));
-  if (amount <= 0 || amount > paidAmount) throw new ApiError(400, 'Refund cannot exceed the amount actually paid.');
-  const method = req.body.method || (order.paymentMethod === 'MIXED' ? 'MIXED' : order.paymentMethod);
-  if (!['CASH','UPI','CREDIT','MIXED'].includes(method)) throw new ApiError(400, 'Invalid refund method.');
+  if (!Number.isFinite(amount) || amount <= 0 || amount > paidAmount) throw new ApiError(400, 'Refund cannot exceed the amount actually paid.');
+  const defaultMethod = paidCash > 0 && paidUpi > 0 ? 'MIXED' : paidUpi > 0 ? 'UPI' : 'CASH';
+  const method = req.body.method || defaultMethod;
+  if (!['CASH','UPI','MIXED'].includes(method)) throw new ApiError(400, 'Invalid refund method.');
   if (method === 'CASH' && amount > paidCash) throw new ApiError(400, 'Cash refund exceeds cash paid.');
   if (method === 'UPI' && amount > paidUpi) throw new ApiError(400, 'UPI refund exceeds UPI paid.');
-  if (method === 'CREDIT' && amount > paidCredit) throw new ApiError(400, 'Credit refund exceeds credit paid.');
   if (method === 'UPI' && !String(req.body.reference || '').trim()) throw new ApiError(400, 'UPI refund reference is required.');
   const businessDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const day = await DayClose.findOne({ businessDate });
@@ -1739,8 +1812,11 @@ const voidOrder =
             );
           }
 
+          // Stock and credit are only applied at checkout, so only a completed
+          // bill has anything to reverse. Voiding an unbilled preparing/ready
+          // order would restock inventory that was never deducted.
           if (
-            order.status === 'open'
+            order.status !== 'completed'
           ) {
             throw new ApiError(
               409,
@@ -1790,12 +1866,6 @@ const voidOrder =
                       .credit
                 );
 
-              customer.totalPurchases =
-                round2(
-                  customer.totalPurchases -
-                    order.grandTotal
-                );
-
               await customer.save({
                 session,
               });
@@ -1825,6 +1895,16 @@ const voidOrder =
                 { session }
               );
             }
+          }
+
+          // Every completed bill with a customer added its grandTotal to the
+          // customer's lifetime purchases, whatever the payment method.
+          if (order.customer) {
+            await Customer.updateOne(
+              { _id: order.customer },
+              { $inc: { totalPurchases: -order.grandTotal } },
+              { session }
+            );
           }
 
           order.status =

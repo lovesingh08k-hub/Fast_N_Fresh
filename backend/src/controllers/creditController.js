@@ -2,6 +2,10 @@ const mongoose = require('mongoose');
 const { Customer, CreditTransaction } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 
+function round2(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 // Idempotency helper shared by grantCredit and recordCreditPayment: if a
 // transaction with this clientRequestId already exists (this is a retry of
 // a request that already succeeded — lost response, double-tap, etc.),
@@ -30,8 +34,8 @@ const grantCredit = asyncHandler(async (req, res) => {
   const { customerId, amount, note, clientRequestId } = req.body;
   if (!customerId) throw new ApiError(400, 'customerId is required.');
 
-  const creditAmount = Number(amount);
-  if (!creditAmount || creditAmount <= 0) throw new ApiError(400, 'A valid credit amount is required.');
+  const creditAmount = round2(Number(amount));
+  if (!Number.isFinite(creditAmount) || creditAmount <= 0) throw new ApiError(400, 'A valid credit amount is required.');
 
   if (clientRequestId) {
     const existing = await findExistingTransactionResponse(clientRequestId);
@@ -47,8 +51,8 @@ const grantCredit = asyncHandler(async (req, res) => {
       const customer = await Customer.findById(customerId).session(session);
       if (!customer) throw new ApiError(404, 'Customer not found.');
 
-      customer.outstandingBalance = Math.round((customer.outstandingBalance + creditAmount) * 100) / 100;
-      customer.totalPurchases = Math.round((customer.totalPurchases + creditAmount) * 100) / 100;
+      customer.outstandingBalance = round2(customer.outstandingBalance + creditAmount);
+      customer.totalPurchases = round2(customer.totalPurchases + creditAmount);
       await customer.save({ session });
 
       const [transaction] = await CreditTransaction.create(
@@ -120,8 +124,8 @@ const recordCreditPayment = asyncHandler(async (req, res) => {
   const { customerId, amount, method, note, clientRequestId } = req.body;
   if (!customerId) throw new ApiError(400, 'customerId is required.');
 
-  const paymentAmount = Number(amount);
-  if (!paymentAmount || paymentAmount <= 0) throw new ApiError(400, 'A valid payment amount is required.');
+  const paymentAmount = round2(Number(amount));
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) throw new ApiError(400, 'A valid payment amount is required.');
   if (!['CASH', 'UPI'].includes(method)) throw new ApiError(400, 'Payment method must be CASH or UPI.');
 
   if (clientRequestId) {
@@ -141,8 +145,8 @@ const recordCreditPayment = asyncHandler(async (req, res) => {
         throw new ApiError(400, `Payment (₹${paymentAmount}) exceeds outstanding due (₹${customer.outstandingBalance}).`);
       }
 
-      customer.outstandingBalance -= paymentAmount;
-      customer.totalPaid += paymentAmount;
+      customer.outstandingBalance = round2(customer.outstandingBalance - paymentAmount);
+      customer.totalPaid = round2(customer.totalPaid + paymentAmount);
       await customer.save({ session });
 
       const [transaction] = await CreditTransaction.create(

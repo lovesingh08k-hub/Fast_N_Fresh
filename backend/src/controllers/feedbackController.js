@@ -12,7 +12,7 @@ const createFeedback = asyncHandler(async (req, res) => {
   if (order.status !== 'completed') throw new ApiError(409, 'Feedback is available after the order is served.');
   const existing = await Feedback.findOne({ order: order._id });
   if (existing) throw new ApiError(409, 'Feedback already submitted for this order.');
-  const feedback = await Feedback.create({ order: order._id, orderNumber: order.orderNumber, rating: score, comment: String(comment || '').trim(), customerName: String(customerName || '').trim(), token });
+  const feedback = await Feedback.create({ order: order._id, orderNumber: order.orderNumber, rating: score, comment: String(comment || '').trim().slice(0, 500), customerName: String(customerName || '').trim().slice(0, 100), token });
   res.status(201).json({ success: true, message: 'Thanks for your feedback!', data: feedback });
 });
 

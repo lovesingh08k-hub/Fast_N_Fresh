@@ -1,5 +1,6 @@
 const { User, Order } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
+const { startOfDay } = require('../utils/dateRanges');
 
 // GET /api/staff
 const listStaff = asyncHandler(async (req, res) => {
@@ -12,8 +13,7 @@ const getStaffMember = asyncHandler(async (req, res) => {
   const staff = await User.findOne({ _id: req.params.id, role: 'staff' });
   if (!staff) throw new ApiError(404, 'Staff member not found.');
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  const startOfToday = startOfDay();
 
   const todaysOrders = await Order.find({
     staff: staff._id,
@@ -39,7 +39,7 @@ const getStaffMember = asyncHandler(async (req, res) => {
 const createStaff = asyncHandler(async (req, res) => {
   const { name, phone, username, password } = req.body;
 
-  if (!name || !phone || !username || !password) {
+  if ([name, phone, username, password].some((v) => typeof v !== 'string' || !v.trim())) {
     throw new ApiError(400, 'Name, phone, username and password are all required.');
   }
   if (password.length < 6) {
@@ -67,8 +67,8 @@ const updateStaff = asyncHandler(async (req, res) => {
   if (!staff) throw new ApiError(404, 'Staff member not found.');
 
   const { name, phone, status } = req.body;
-  if (name !== undefined) staff.name = name.trim();
-  if (phone !== undefined) staff.phone = phone.trim();
+  if (name !== undefined) staff.name = String(name).trim();
+  if (phone !== undefined) staff.phone = String(phone).trim();
   if (status !== undefined) staff.status = status;
 
   await staff.save();
@@ -78,7 +78,7 @@ const updateStaff = asyncHandler(async (req, res) => {
 // POST /api/staff/:id/reset-password  { newPassword }
 const resetStaffPassword = asyncHandler(async (req, res) => {
   const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6) {
+  if (typeof newPassword !== 'string' || newPassword.length < 6) {
     throw new ApiError(400, 'New password must be at least 6 characters.');
   }
 

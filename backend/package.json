@@ -13,7 +13,8 @@
     "migrate:breakfast-biryani": "node src/utils/migrateBreakfastBiryani.js",
     "migrate:kitchen-flow": "node src/utils/migrateKitchenFlow.js",
     "check": "node scripts/check-syntax.js",
-    "reset:fresh": "node src/utils/resetFreshDatabase.js"
+    "reset:fresh": "node src/utils/resetFreshDatabase.js",
+    "set:admin": "node src/utils/setAdminCredentials.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

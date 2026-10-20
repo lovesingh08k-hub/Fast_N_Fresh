@@ -34,7 +34,7 @@ const createPublicPayment = asyncHandler(async (req, res) => {
 
   const requestId = normalizeClientRequestId(clientRequestId);
 
-  const existing = await PaymentTransaction.findOne({ clientRequestId })
+  const existing = await PaymentTransaction.findOne({ clientRequestId: requestId })
     .populate('table', 'name number');
   if (existing) {
     if (existing.status === 'succeeded' && existing.orderId) {
@@ -221,6 +221,16 @@ const getPublicPaymentStatus = asyncHandler(async (req, res) => {
       if (status.providerPaymentId) transaction.providerPaymentId = status.providerPaymentId;
       await transaction.save();
     }
+  } else if (transaction.status === 'succeeded' && !transaction.orderId) {
+    // Verified payment whose order creation failed earlier (e.g. a transient
+    // DB error): retry so a paid customer always ends up with an order.
+    const order = await finalizeVerifiedPayment(transaction._id, transaction.providerPayload?.verification || {});
+    if (order) pushNewOrderAlert(order).catch(() => {});
+  }
+
+  if (transaction.status === 'succeeded' && !transaction.orderId) {
+    const refreshed = await PaymentTransaction.findById(transaction._id).select('orderId');
+    transaction.orderId = refreshed?.orderId;
   }
 
   res.json({
