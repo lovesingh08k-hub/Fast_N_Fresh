@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../core/network/dio_client.dart';
@@ -54,7 +54,8 @@ class PushNotificationService {
   /// Call once, early in app startup (before runApp), after
   /// WidgetsFlutterBinding.ensureInitialized().
   Future<void> init() async {
-    if (_initialized) return;
+    // Firebase is only configured for the Android app.
+    if (_initialized || kIsWeb) return;
 
     try {
       await Firebase.initializeApp();
@@ -88,7 +89,7 @@ class PushNotificationService {
     try {
       final messaging = FirebaseMessaging.instance;
 
-      if (Platform.isIOS || Platform.isMacOS) {
+      if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
         await messaging.requestPermission(alert: true, badge: true, sound: true);
       }
 

@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -44,7 +43,7 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _checkForAvailableUpdate() async {
     // Updates are distributed as an APK, which only Android can install.
-    if (!Platform.isAndroid) return;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     try {
       final result = await AppUpdateService.instance.checkForUpdate();
       if (!mounted || !result.hasUpdate) return;

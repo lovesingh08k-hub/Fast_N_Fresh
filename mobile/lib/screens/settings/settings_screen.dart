@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 
@@ -480,7 +479,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                     ),
 
                     // Sharing the APK only makes sense on Android.
-                    if (Platform.isAndroid) ...[
+                    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
 
                       const SizedBox(height: 12),
 

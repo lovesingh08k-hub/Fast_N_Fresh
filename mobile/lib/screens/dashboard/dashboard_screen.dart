@@ -468,7 +468,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         final isSmallPhone = width < 390;
 
         return GridView.count(
-          crossAxisCount: 2,
+          // All four tiles in one row on a wide (web/tablet) screen.
+          crossAxisCount: width >= 900 ? 4 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 10,

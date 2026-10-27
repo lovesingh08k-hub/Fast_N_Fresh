@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -453,6 +454,11 @@ class ReceiptService {
     BusinessSettings settings, {
     double widthMm = 80,
   }) async {
+    // The web app prints through the browser print dialog instead.
+    if (kIsWeb) {
+      await printReceipt(order, settings, widthMm: widthMm);
+      return true;
+    }
     final bytes = await buildThermalTicketBytes(order, settings, widthMm: widthMm);
     return BluetoothPrinterService().printBytes(bytes);
   }

@@ -1,8 +1,7 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/network/api_config.dart';
 import '../../core/network/api_exception.dart';
@@ -24,7 +23,7 @@ class ProductImagePicker extends StatefulWidget {
 
 class _ProductImagePickerState extends State<ProductImagePicker> {
   String? _currentUrl;
-  File? _localPreview;
+  Uint8List? _localPreview;
   bool _uploading = false;
   String? _error;
 
@@ -40,7 +39,14 @@ class _ProductImagePickerState extends State<ProductImagePicker> {
 
   Future<void> _pick(ImageSource source) async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source, imageQuality: 85);
+    // Browsers have no compress plugin, so the web picker resizes the photo
+    // to a thumbnail itself.
+    final picked = await picker.pickImage(
+      source: source,
+      imageQuality: kIsWeb ? 45 : 85,
+      maxWidth: kIsWeb ? 400 : null,
+      maxHeight: kIsWeb ? 400 : null,
+    );
     if (picked == null) return;
 
     if (!mounted) return;
@@ -50,10 +56,11 @@ class _ProductImagePickerState extends State<ProductImagePicker> {
     });
 
     try {
-      final compressedFile = await _compress(File(picked.path));
-      if (mounted) setState(() => _localPreview = compressedFile);
+      final bytes = kIsWeb ? await picked.readAsBytes() : await _compress(picked.path);
+      if (mounted) setState(() => _localPreview = bytes);
 
-      final url = await UploadService().uploadProductImage(compressedFile);
+      final name = kIsWeb ? picked.name : 'product.jpg';
+      final url = await UploadService().uploadProductImage(bytes, filename: name);
       if (mounted) setState(() => _currentUrl = url);
       widget.onUploaded(url);
     } on ApiException catch (e) {
@@ -70,22 +77,13 @@ class _ProductImagePickerState extends State<ProductImagePicker> {
   /// The uploaded file is intentionally kept at or below 10 KB because these
   /// images are only used as small product/menu thumbnails. We progressively
   /// reduce JPEG quality and dimensions until the target is reached.
-  Future<File> _compress(File file) async {
-    final dir = await getTemporaryDirectory();
-    final stamp = DateTime.now().millisecondsSinceEpoch;
-
-    // Try sensible thumbnail sizes first, then fall back to a tiny thumbnail
-    // if a complex photo still exceeds 10 KB.
-
-
-    File? smallest;
+  Future<Uint8List> _compress(String path) async {
+    Uint8List? smallest;
 
     for (final size in _sizes) {
       for (final quality in _qualities) {
-        final targetPath = '${dir.path}/product_${stamp}_${size}_$quality.jpg';
-        final result = await FlutterImageCompress.compressAndGetFile(
-          file.absolute.path,
-          targetPath,
+        final result = await FlutterImageCompress.compressWithFile(
+          path,
           format: CompressFormat.jpeg,
           quality: quality,
           minWidth: size,
@@ -94,12 +92,10 @@ class _ProductImagePickerState extends State<ProductImagePicker> {
         );
 
         if (result == null) continue;
-        final output = File(result.path);
-        final bytes = await output.length();
-        smallest = output;
+        smallest = result;
 
-        if (bytes <= _maxBytes) {
-          return output;
+        if (result.length <= _maxBytes) {
+          return result;
         }
       }
     }
@@ -125,7 +121,7 @@ class _ProductImagePickerState extends State<ProductImagePicker> {
               },
             ),
             // image_picker cannot open the camera on macOS.
-            if (!Platform.isMacOS)
+            if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS)
               ListTile(
                 leading: const Icon(Icons.camera_alt_outlined),
                 title: const Text('Take a Photo'),
@@ -174,7 +170,7 @@ class _ProductImagePickerState extends State<ProductImagePicker> {
 
   Widget _buildPreview() {
     if (_localPreview != null) {
-      return Image.file(_localPreview!, fit: BoxFit.cover, width: double.infinity);
+      return Image.memory(_localPreview!, fit: BoxFit.cover, width: double.infinity);
     }
     if (_currentUrl != null && _currentUrl!.isNotEmpty) {
       return Image.network(

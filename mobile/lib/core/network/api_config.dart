@@ -17,6 +17,8 @@
 ///   http://10.169.90.212:5000/api
 library;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 class ApiConfig {
   ApiConfig._();
 
@@ -26,11 +28,16 @@ class ApiConfig {
   ///
   /// --dart-define=API_BASE_URL=https://fast-n-fresh-cafe-api.onrender.com/api
   ///
-  /// The default is the production Render backend.
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://fast-n-fresh-cafe-api.onrender.com/api',
-  );
+  /// The default is the production Render backend. The web app is served
+  /// by the backend itself (at /app/), so by default it calls the API on
+  /// the same host it was loaded from -- same-origin, no CORS needed.
+  static String get baseUrl {
+    if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
+    if (kIsWeb) return '${Uri.base.origin}/api';
+    return 'https://fast-n-fresh-cafe-api.onrender.com/api';
+  }
+
+  static const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
 
   /// Connection timeout.
   static const Duration connectTimeout = Duration(seconds: 20);

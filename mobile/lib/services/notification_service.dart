@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -24,7 +23,9 @@ class NotificationService {
       'Alerts when a new QR order arrives.';
 
   Future<void> init() async {
-    if (_initialized) return;
+    // Browsers have no local notification plugin; the web app shows new
+    // QR orders through the in-app popup only.
+    if (_initialized || kIsWeb) return;
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -57,8 +58,9 @@ class NotificationService {
   /// Safe to call more than once -- the OS only prompts the user the first
   /// time.
   Future<void> requestPermission() async {
+    if (kIsWeb) return;
     // permission_handler has no macOS implementation.
-    if (!Platform.isMacOS) {
+    if (defaultTargetPlatform != TargetPlatform.macOS) {
       await Permission.notification.request();
     }
 

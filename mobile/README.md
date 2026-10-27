@@ -120,6 +120,28 @@ Differences from Android: no camera (pick product photos from files), no APK
 update/share, and push notifications need a Firebase macOS config
 (`GoogleService-Info.plist`); in-app new-order alerts still work.
 
+## 5c. Web app (browser)
+
+The same app also runs in a browser. The backend serves it at
+`https://<api-host>/app/` (production:
+https://fast-n-fresh-cafe-api.onrender.com/app/), so it calls the API on the
+same host and needs no CORS setting.
+
+To publish a new web version (Windows, from the `mobile` folder):
+
+```powershell
+.\build-web.ps1
+```
+
+It builds the app and copies it into `backend/public/app`. Commit that
+folder and push; Render redeploys the backend with the new web app.
+
+Differences from Android: printing (bill, KOT) opens the browser's print
+dialog with the receipt PDF instead of a Bluetooth printer; no push or system
+notifications (the in-app new-order popup still works); no APK update/share.
+Product photos are resized by the browser before upload. Log in with the same
+accounts as the app.
+
 ## 6. App icon & splash screen
 
 Placeholder brand-green icons (a simple cup mark) are already in

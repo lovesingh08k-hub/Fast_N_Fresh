@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Replaced by the --base-href given to `flutter build web` (/app/). -->
+  <base href="/app/">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PWP POS — billing, orders, tables and reports for the cafe.">
+  <meta name="theme-color" content="#176B52">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="PWP POS">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+
+  <title>PWP POS</title>
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #176B52; }
+    #loading {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: #E7F3EE; font-size: 15px;
+    }
+    #loading img { width: 96px; height: 96px; border-radius: 22px; }
+    #loading .bar {
+      width: 140px; height: 4px; border-radius: 4px; overflow: hidden;
+      background: rgba(255, 255, 255, .2);
+    }
+    #loading .bar::after {
+      content: ""; display: block; width: 40%; height: 100%; border-radius: 4px;
+      background: #E7F3EE; animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  </style>
+</head>
+<body>
+  <!-- Shown until Flutter draws its first frame. -->
+  <div id="loading">
+    <img src="icons/Icon-192.png" alt="">
+    <div class="bar"></div>
+    <div>Loading PWP POS…</div>
+  </div>
+  <script src="flutter_bootstrap.js" async></script>
+  <script src="loading.js"></script>
+</body>
+</html>

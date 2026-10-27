@@ -148,6 +148,32 @@ app.use('/menu', express.static(path.join(__dirname, '..', 'public', 'menu'), {
   index: 'index.html',
 }));
 
+// POS web app (the Flutter app built for the browser, see
+// mobile/README.md "Web app (browser)"). Served from this service so it calls the API
+// same-origin and needs no CORS entry. Flutter needs WebAssembly, its
+// CanvasKit renderer from gstatic, Google Fonts, and blob: frames for
+// printing, so it gets its own Content-Security-Policy instead of helmet's.
+const posWebDir = path.join(__dirname, '..', 'public', 'app');
+const posWebCsp = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com",
+  "connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "worker-src 'self' blob:",
+  "frame-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+].join('; ');
+app.use('/app', (req, res, next) => {
+  res.setHeader('Content-Security-Policy', posWebCsp);
+  // File names are not fingerprinted, so always revalidate after a release.
+  res.setHeader('Cache-Control', 'no-cache');
+  next();
+}, express.static(posWebDir, { index: 'index.html' }));
+app.get('/app', (req, res) => res.redirect(301, '/app/'));
+
 app.get('/', (req, res) => {
   res.json({
     success: true,

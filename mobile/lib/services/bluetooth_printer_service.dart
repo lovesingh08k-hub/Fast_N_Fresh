@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -39,8 +38,10 @@ class BluetoothPrinterService extends ChangeNotifier {
   String? _connectedName;
   String? _connectedMac;
 
-  bool get isConnected => _connected;
-  String? get connectedName => _connectedName;
+  /// In the web app every print goes through the browser print dialog
+  /// (see ReceiptService/KotService), so it always counts as "connected".
+  bool get isConnected => kIsWeb || _connected;
+  String? get connectedName => kIsWeb ? 'Browser print' : _connectedName;
   String? get connectedMac => _connectedMac;
 
   /// Requests the Bluetooth permissions required by the current
@@ -56,7 +57,7 @@ class BluetoothPrinterService extends ChangeNotifier {
   ///
   /// Location is NOT requested on Android 12+.
   Future<bool> requestPermissions() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return true;
     }
 
@@ -209,6 +210,7 @@ class BluetoothPrinterService extends ChangeNotifier {
 
   /// Refreshes the current Bluetooth printer connection status.
   Future<void> refreshConnectionStatus() async {
+    if (kIsWeb) return;
     try {
       _connected = await PrintBluetoothThermal.connectionStatus;
 
@@ -229,6 +231,7 @@ class BluetoothPrinterService extends ChangeNotifier {
 
   /// Tries to reconnect to the last successfully connected printer.
   Future<void> reconnectLastDevice() async {
+    if (kIsWeb) return;
     await refreshConnectionStatus();
 
     if (_connected) {
@@ -289,6 +292,8 @@ class BluetoothPrinterService extends ChangeNotifier {
   ///
   /// Returns false if no printer is connected or writing fails.
   Future<bool> printBytes(List<int> bytes) async {
+    // Browsers cannot reach a Bluetooth printer.
+    if (kIsWeb) return false;
     if (!_connected) {
       await refreshConnectionStatus();
 

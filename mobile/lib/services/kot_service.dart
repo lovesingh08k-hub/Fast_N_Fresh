@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -216,6 +217,11 @@ class KotService {
   }
 
   Future<bool> printKotViaBluetooth(Order order, BusinessSettings settings, KotTicket ticket, {double widthMm = width80mm}) async {
+    // The web app prints through the browser print dialog instead.
+    if (kIsWeb) {
+      await printKotPdf(order, settings, ticket, widthMm: widthMm);
+      return true;
+    }
     final bytes = await buildBluetoothKot(order, settings, ticket, widthMm: widthMm);
     return BluetoothPrinterService().printBytes(bytes);
   }
@@ -299,6 +305,10 @@ class KotService {
     BusinessSettings settings, {
     double widthMm = width80mm,
   }) async {
+    if (kIsWeb) {
+      await printPdf(order, settings, widthMm: widthMm);
+      return true;
+    }
     final bytes = await buildBluetoothTicket(order, settings, widthMm: widthMm);
     return BluetoothPrinterService().printBytes(bytes);
   }
