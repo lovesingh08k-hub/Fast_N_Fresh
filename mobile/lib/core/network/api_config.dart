@@ -5,10 +5,10 @@
 /// Never ship localhost, 127.0.0.1, or a local PC IP in a production APK.
 ///
 /// Production APK:
-///   flutter build apk --release --dart-define=API_BASE_URL=https://fast-n-fresh-cafe-api.onrender.com/api
+///   flutter build apk --release --dart-define=API_BASE_URL=https://fast-n-fresh-slh9.onrender.com/api
 ///
 /// Current Fast N Fresh production backend:
-///   https://fast-n-fresh-cafe-api.onrender.com/api
+///   https://fast-n-fresh-slh9.onrender.com/api
 ///
 /// Android Emulator + local backend:
 ///   http://10.0.2.2:5000/api
@@ -26,7 +26,7 @@ class ApiConfig {
   ///
   /// You can override this default at build time using:
   ///
-  /// --dart-define=API_BASE_URL=https://fast-n-fresh-cafe-api.onrender.com/api
+  /// --dart-define=API_BASE_URL=https://fast-n-fresh-slh9.onrender.com/api
   ///
   /// The default is the production Render backend. The web app is served
   /// by the backend itself (at /app/), so by default it calls the API on
@@ -34,7 +34,7 @@ class ApiConfig {
   static String get baseUrl {
     if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
     if (kIsWeb) return '${Uri.base.origin}/api';
-    return 'https://fast-n-fresh-cafe-api.onrender.com/api';
+    return 'https://fast-n-fresh-slh9.onrender.com/api';
   }
 
   static const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');

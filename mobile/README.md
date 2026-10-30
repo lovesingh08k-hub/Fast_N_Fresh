@@ -28,7 +28,7 @@ device itself, not your development PC.
 |---|---|
 | Android Emulator, backend on your dev PC | `http://10.0.2.2:5000/api` (default, no flag needed) |
 | Physical device on the same Wi-Fi | `http://<your-computer-LAN-IP>:5000/api` |
-| Production | `https://fast-n-fresh-cafe-api.onrender.com/api` (built-in default; --dart-define can override it) |
+| Production | `https://fast-n-fresh-slh9.onrender.com/api` (built-in default; --dart-define can override it) |
 
 ```bash
 # Emulator (uses the built-in default — no flag needed)
@@ -124,7 +124,7 @@ update/share, and push notifications need a Firebase macOS config
 
 The same app also runs in a browser. The backend serves it at
 `https://<api-host>/app/` (production:
-https://fast-n-fresh-cafe-api.onrender.com/app/), so it calls the API on the
+https://fast-n-fresh-slh9.onrender.com/app/), so it calls the API on the
 same host and needs no CORS setting.
 
 To publish a new web version (Windows, from the `mobile` folder):
