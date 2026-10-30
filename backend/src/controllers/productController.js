@@ -62,7 +62,7 @@ const getProduct = asyncHandler(async (req, res) => {
 });
 
 const createProduct = asyncHandler(async (req, res) => {
-  const { name, category, sellingPrice, costPrice, stock, lowStockThreshold, trackInventory, status, imageUrl } = req.body;
+  const { name, category, sellingPrice, costPrice, stock, lowStockThreshold, trackInventory, status, imageUrl, taxRate, description, foodType } = req.body;
 
   if (typeof name !== 'string' || !name.trim()) throw new ApiError(400, 'Product name is required.');
   if (!category) throw new ApiError(400, 'Category is required.');
@@ -80,6 +80,9 @@ const createProduct = asyncHandler(async (req, res) => {
     costPrice: costPrice || 0,
     stock: stock || 0,
     lowStockThreshold: lowStockThreshold ?? 10,
+    taxRate: taxRate === '' || taxRate === undefined ? null : taxRate,
+    description: description || '',
+    foodType: foodType || '',
     trackInventory: trackInventory ?? true,
     status: status || 'available',
     imageUrl: imageUrl || '',
@@ -105,10 +108,12 @@ const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findOne({ _id: req.params.id, isDeleted: false });
   if (!product) throw new ApiError(404, 'Product not found.');
 
-  const editable = ['name', 'category', 'sellingPrice', 'costPrice', 'lowStockThreshold', 'trackInventory', 'status', 'imageUrl'];
+  const editable = ['name', 'category', 'sellingPrice', 'costPrice', 'lowStockThreshold', 'trackInventory', 'status', 'imageUrl', 'taxRate', 'description', 'foodType'];
   editable.forEach((field) => {
     if (req.body[field] !== undefined) product[field] = req.body[field];
   });
+  // Empty GST rate = use the outlet's default rate.
+  if (req.body.taxRate === '') product.taxRate = null;
 
   await product.save();
   await linkImageAsset(product._id, product.imageUrl);

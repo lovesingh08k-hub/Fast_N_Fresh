@@ -124,10 +124,17 @@ async function pushNewOrderAlert(order) {
   try {
     // eslint-disable-next-line global-require
     const { User } = require('../models');
+    // In a multi-outlet business only people working in this outlet
+    // (admins, users assigned to it, or users with no assignment) are told.
+    // eslint-disable-next-line global-require
+    const outlet = require('../tenancy/context').currentContext()?.outlet;
     const staffUsers = await User.find({
       status: 'active',
       role: { $in: ['admin', 'manager', 'staff'] },
       fcmTokens: { $exists: true, $ne: [] },
+      ...(outlet
+        ? { $or: [{ role: 'admin' }, { outlets: { $size: 0 } }, { outlets: { $exists: false } }, { outlets: outlet.code }] }
+        : {}),
     }).select('fcmTokens');
 
     const tokens = staffUsers.flatMap((u) => u.fcmTokens || []);

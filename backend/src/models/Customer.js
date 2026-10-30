@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const userRef = require('./userRef');
 
 const customerSchema = new mongoose.Schema(
   {
@@ -10,7 +11,7 @@ const customerSchema = new mongoose.Schema(
     totalPaid: { type: Number, default: 0 }, // lifetime payments received
     outstandingBalance: { type: Number, default: 0, index: true }, // current UDHAR due
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef },
   },
   { timestamps: true }
 );

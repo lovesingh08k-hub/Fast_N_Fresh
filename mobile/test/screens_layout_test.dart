@@ -55,7 +55,7 @@ void main() {
       for (final size in sizes) {
         testWidgets('fits at ${size.width.toInt()}dp', (tester) async {
           AppColors.setDarkMode(dark);
-          await pumpScreen(tester, const NewOrderScreen(), size: size);
+          await pumpScreen(tester, const NewOrderScreen(), size: size, auth: authAs('admin'));
           expect(tester.takeException(), isNull);
           expect(find.text('Dine-In'), findsOneWidget);
           // Lower cards are built lazily; scroll to them on short screens.

@@ -280,7 +280,7 @@ class CountersPanelState extends State<CountersPanel> {
                           const TextSpan(text: ' occupied  •  '),
                           TextSpan(
                             text: '$available',
-                            style: const TextStyle(color: FreshUi.mint, fontWeight: FontWeight.w800),
+                            style: const TextStyle(color: FreshUi.green, fontWeight: FontWeight.w800),
                           ),
                           const TextSpan(text: ' available'),
                         ]),
@@ -359,7 +359,7 @@ class _CounterCard extends StatelessWidget {
   Color get _statusColor {
     if (_isBilling) return FreshUi.amber;
     if (order != null) return FreshUi.red;
-    return FreshUi.mint;
+    return FreshUi.green;
   }
 
   String _ageText(DateTime at) {

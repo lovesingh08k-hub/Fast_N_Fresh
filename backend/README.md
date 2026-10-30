@@ -191,7 +191,58 @@ than committing the `.env` file. Firebase Cloud Messaging additionally requires 
 service-account credential (`FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_PATH`)
 on the backend; the Android `google-services.json` is not a substitute for that server credential.
 
-## 8. Uptime monitoring (UptimeRobot)
+## 8. Selling to many cafes (multi-client platform)
+
+One backend, one APK and one web app (`/app/`) serve every client. Each
+client (business) gets its own database for users and one database per
+outlet, so outlets of a franchise never see each other's customers or bills.
+The vendor manages clients in the **Platform Admin panel** at
+`https://<api-host>/platform/`.
+
+### First-time setup (once per server)
+
+```bash
+npm run platform:init -- <vendorUsername> <vendorPassword> [<businessCode>]
+```
+
+This creates the vendor login and registers the existing database
+(`MONGODB_URI`) as the **default client** with outlet `main`. Its data,
+users, printed QR codes and already-installed apps keep working; its staff
+can leave the business code empty (older APKs) or type it.
+
+Optional env: `PLATFORM_DB_NAME` (default `pwp_platform`) — database for the
+client registry.
+
+### Adding a client
+
+In the panel: **+ New client** → business name, business code (what staff
+type at login), first outlet, licence end date, outlet limit and the owner
+login. Give the client the app/web link, their business code and the owner
+login. The owner adds staff in *Users & Roles*.
+
+- **Franchise / more outlets:** raise *Outlet limit*, then **+ Outlet**
+  (optionally copying the menu from another outlet). Each outlet has its own
+  bills (numbered from 1), customers, tables, stock and QR menu
+  (`/menu?table=N&o=<business>:<outlet>`). The owner switches outlet in
+  *More*; staff can be limited to their outlet.
+- **Turn off / on:** *Suspend* (whole client) or *Turn off* (one outlet). Their
+  app shows "Subscription not active" with your message until re-activated.
+  The licence also stops on its *Valid until* date; owners see a warning 15
+  days before.
+- **Storage:** every client database lives on the main cluster unless you
+  paste a separate MongoDB URI for that client (e.g. its own free 512 MB
+  Atlas cluster). *Storage* in the panel shows each outlet's size. A free
+  cluster holds up to ~25 outlets' databases (Atlas limit of 500 collections).
+
+### Data archive (keeps the free database small)
+
+Every 4 months (or when storage is 70% full) the client's admin sees a
+reminder on the dashboard. In *More → Data & Storage* they download a full
+JSON backup and an Excel-ready CSV of bills, then delete those records from
+the server. The last 90 days and open bills always stay; customers, menu,
+tables and staff are never deleted; a per-day sales total is kept.
+
+## 9. Uptime monitoring (UptimeRobot)
 
 Render's free plan puts the service to sleep after ~15 minutes without
 traffic, so the first QR-menu/app request afterwards waits for a cold start.

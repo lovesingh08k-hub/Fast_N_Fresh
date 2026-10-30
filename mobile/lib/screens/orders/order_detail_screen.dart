@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/widgets/fresh_ui.dart';
+import '../../core/widgets/pos_ui.dart';
 import '../../core/widgets/state_widgets.dart';
 import '../../models/order.dart';
 import '../../models/misc_models.dart';
@@ -269,24 +271,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> with WidgetsBindi
     final order = _order!;
 
     return ListView(
-      padding: const EdgeInsets.all(13),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
-        _paymentSummary(order),
-
-        if (!order.isQrOrder &&
-            order.paymentStatus != 'paid' &&
-            const ['open', 'preparing', 'ready'].contains(order.status))
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: FilledButton.icon(
-              onPressed: () async {
-                await openBill(context, order);
-                if (mounted) _load();
-              },
-              icon: const Icon(Icons.receipt_long),
-              label: const Text('Bill & Pay'),
-            ),
-          ),
+        _orderHeader(order),
+        const SizedBox(height: 14),
 
         if (order.isQrOrder &&
             order.status != 'completed' &&
@@ -427,128 +415,95 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> with WidgetsBindi
           ),
 
         Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.border,
-            ),
-          ),
+          padding: const EdgeInsets.all(16),
+          decoration: FreshUi.card(radius: 22),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                Formatters.dateTime(order.createdAt),
-                style: Theme.of(context).textTheme.bodyMedium,
+              Text('Transaction Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: Text('Items', style: _headStyle)),
+                  SizedBox(width: 40, child: Text('Qty', textAlign: TextAlign.center, style: _headStyle)),
+                  SizedBox(width: 80, child: Text('Price', textAlign: TextAlign.right, style: _headStyle)),
+                ],
               ),
-
-              Text(
-                order.orderType == 'dine_in'
-                    ? 'Dine-In'
-                      '${order.tableName != null ? ' · ${order.tableName}' : ''}'
-                      '${order.tableCustomerLabel != null ? ' · ${order.tableCustomerLabel}' : ''}'
-                    : (order.orderType == 'delivery'
-                        ? 'Delivery'
-                        : 'Takeaway'),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-
-              if (order.staffName != null)
-                Text(
-                  'Attended by: ${order.staffName}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-
-              if (order.customerName != null)
-                Text(
-                  'Customer: ${order.customerName}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-
-              if (order.qrCustomerContact?.name != null)
-                Text(
-                  'Customer: ${order.qrCustomerContact!.name}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-
-              if (order.qrCustomerContact?.phone != null)
-                Text(
-                  'Phone: ${order.qrCustomerContact!.phone}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-
-              const Divider(height: 24),
-
+              Divider(height: 18, color: AppColors.border),
               ...order.items.map(
                 (item) => Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 4,
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Text(
-                          '${item.name}  x${item.quantity}',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.name, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                            if (item.note != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 3),
+                                child: StatusPill(label: item.note!, color: AppColors.warning, icon: Icons.edit_note_rounded),
+                              ),
+                          ],
                         ),
                       ),
-                      Text(
-                        Formatters.currency(item.total),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      SizedBox(width: 40, child: Text('${item.quantity}', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary))),
+                      SizedBox(
+                        width: 80,
+                        child: Text(Formatters.currency(item.total), textAlign: TextAlign.right,
+                            style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                       ),
                     ],
                   ),
                 ),
               ),
-
-              const Divider(height: 24),
-
-              _row(
-                'Subtotal',
-                Formatters.currency(order.subtotal),
-              ),
-
-              if (order.discount > 0)
-                _row(
-                  'Discount',
-                  '- ${Formatters.currency(order.discount)}',
-                ),
-
-              if (order.tax > 0)
-                _row(
-                  'Tax',
-                  Formatters.currency(order.tax),
-                ),
-
-              const Divider(height: 20),
-
-              _row(
-                'Grand Total',
-                Formatters.currency(order.grandTotal),
-                bold: true,
-              ),
-
-              const SizedBox(height: 12),
-
-              _row(
-                'Payment Method',
-                order.paymentMethod,
-              ),
-
-              if (order.paymentMethod == 'CASH' &&
-                  order.amountReceived != null) ...[
-                _row(
-                  'Amount Received',
-                  Formatters.currency(
-                    order.amountReceived!,
+              Divider(height: 24, color: AppColors.border),
+              _row('Items (${order.items.fold<int>(0, (n, i) => n + i.quantity)})', Formatters.currency(order.subtotal)),
+              // Discount, charges, GST per rate and round-off.
+              if (order.bill.taxes.isNotEmpty || order.bill.hasCharges || order.bill.roundOff != 0 || order.bill.complimentary)
+                for (final row in order.bill.rows())
+                  _row(
+                    row.$1,
+                    row.$2 < 0 ? '- ${Formatters.currency(-row.$2)}' : Formatters.currency(row.$2),
+                  )
+              else ...[
+                if (order.discount > 0) _row('Discount', '- ${Formatters.currency(order.discount)}'),
+                if (order.tax > 0) _row('Tax', Formatters.currency(order.tax)),
+              ],
+              Divider(height: 24, color: AppColors.border),
+              _row('Total', Formatters.currency(order.grandTotal), bold: true),
+              if (order.paymentStatus == 'paid' || order.status == 'completed') ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(14)),
+                  child: Column(
+                    children: [
+                      _row('Paid by', ReceiptService.paymentLabel(order)),
+                      if (order.onlineOrderRef != null) _row('App order ID', order.onlineOrderRef!),
+                      if (order.cardReference != null) _row('Card ref', order.cardReference!),
+                      if (order.upiReference?.trim().isNotEmpty == true) _row('UTR', order.upiReference!),
+                      if (order.paymentMethod == 'CASH' && order.amountReceived != null) ...[
+                        _row('Amount received', Formatters.currency(order.amountReceived!)),
+                        _row('Change returned', Formatters.currency(order.changeReturned)),
+                      ],
+                    ],
                   ),
                 ),
-                _row(
-                  'Change Returned',
-                  Formatters.currency(
-                    order.changeReturned,
+              ],
+              if (!order.isQrOrder && order.paymentStatus != 'paid' && const ['open', 'preparing', 'ready'].contains(order.status)) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      await openBill(context, order);
+                      if (mounted) _load();
+                    },
+                    icon: const Icon(Icons.payments_rounded),
+                    label: Text('Pay Bill  •  ${Formatters.currency(order.grandTotal)}'),
                   ),
                 ),
               ],
@@ -556,6 +511,74 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> with WidgetsBindi
           ),
         ),
       ],
+    );
+  }
+
+  TextStyle get _headStyle => TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted);
+
+  /// Code badge, customer, bill number / type, and status pills.
+  Widget _orderHeader(Order order) {
+    final paid = order.paymentStatus == 'paid' || order.status == 'completed';
+    final voided = order.status == 'voided';
+    final label = order.tableCustomerLabel?.trim() ?? '';
+    final slot = RegExp(r'^([TD]\d+)').firstMatch(label)?.group(1);
+    final code = order.orderType != 'dine_in' && slot != null
+        ? slot
+        : order.tableNumber != null
+            ? 'T${order.tableNumber}'
+            : '#${order.orderNumber}';
+    final type = order.orderType == 'dine_in'
+        ? 'Dine In${order.tableName != null ? ' · ${order.tableName}' : ''}'
+        : order.orderType == 'delivery'
+            ? 'Delivery'
+            : 'Takeaway';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: FreshUi.card(radius: 22),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CodeBadge(code: code, color: AppColors.primary, size: 52),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(order.printCustomerName ?? 'Walk-in customer', maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                const SizedBox(height: 2),
+                Text('#${order.orderNumber} / $type', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                const SizedBox(height: 2),
+                Text(
+                  '${Formatters.dateTime(order.createdAt)}${order.staffName != null ? ' · ${order.staffName}' : ''}',
+                  style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                ),
+                if (order.invoiceNumber != null) ...[
+                  const SizedBox(height: 2),
+                  Text('Invoice ${order.invoiceNumber}', style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (voided)
+                StatusPill(label: 'Cancelled', color: AppColors.danger, icon: Icons.block)
+              else if (order.status == 'completed')
+                StatusPill(label: 'Completed', color: AppColors.success, icon: Icons.check_circle_rounded)
+              else
+                StatusPill(label: 'Running', color: AppColors.info, icon: Icons.timelapse_rounded),
+              const SizedBox(height: 6),
+              if (!voided)
+                paid
+                    ? StatusPill(label: 'Paid', color: AppColors.success)
+                    : StatusPill(label: 'Waiting for payment', color: AppColors.warning),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -604,25 +627,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> with WidgetsBindi
           ),
         ],
       ),
-    );
-  }
-  Widget _paymentSummary(Order order) {
-    final paid = order.paymentStatus == 'paid';
-    final color = paid ? AppColors.success : AppColors.warning;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: color.withValues(alpha: .08), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withValues(alpha: .30))),
-      child: Row(children: [
-        Icon(paid ? Icons.verified : Icons.pending_actions, color: color),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(paid ? 'PAYMENT PAID' : 'PAYMENT PENDING', style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 12)),
-          const SizedBox(height: 2),
-          Text(order.paymentMethod == 'UPI' && !paid ? 'Verify UPI reference / UTR before checkout.' : '${order.paymentMethod} • ${order.grandTotal.toStringAsFixed(2)}'),
-          if (order.upiReference?.trim().isNotEmpty == true) Text('UTR: ${order.upiReference}', style: const TextStyle(fontSize: 12)),
-        ])),
-      ]),
     );
   }
 

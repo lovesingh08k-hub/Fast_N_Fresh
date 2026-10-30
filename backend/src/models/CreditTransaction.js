@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const userRef = require('./userRef');
 
 // Ledger of every UDHAR event: a new credit sale (DEBIT) or a payment
 // received against outstanding due (CREDIT/PAID).
@@ -11,7 +12,7 @@ const creditTransactionSchema = new mongoose.Schema(
     order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
     balanceAfter: { type: Number, required: true },
     note: { type: String, trim: true },
-    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef, required: true },
 
     // Idempotency guard for UDHAR payment collection / credit grants, same
     // pattern as Order.clientRequestId — protects against a retried request

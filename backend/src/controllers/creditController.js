@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { startSession } = require('../tenancy/context');
 const { Customer, CreditTransaction } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 
@@ -42,7 +43,7 @@ const grantCredit = asyncHandler(async (req, res) => {
     if (existing) return res.status(200).json(existing);
   }
 
-  const session = await mongoose.startSession();
+  const session = await startSession();
   let resultCustomer;
   let resultTransaction;
 
@@ -133,7 +134,7 @@ const recordCreditPayment = asyncHandler(async (req, res) => {
     if (existing) return res.status(200).json(existing);
   }
 
-  const session = await mongoose.startSession();
+  const session = await startSession();
   let resultCustomer;
   let resultTransaction;
 

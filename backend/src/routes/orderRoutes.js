@@ -15,6 +15,9 @@ const {
   getOrder,
   refundOrder,
   startOpenOrder,
+  quoteOrder,
+  splitOpenOrder,
+  mergeOpenOrders,
 } = require('../controllers/orderController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -23,6 +26,7 @@ const router = express.Router();
 router.use(protect);
 
 router.post('/', createOrder);
+router.post('/quote', quoteOrder); // bill preview (GST, charges, round-off); saves nothing
 router.post('/open', startOpenOrder); // admin/manager/staff can create bills (takeaway/delivery/quick dine-in)
 router.get('/', listOrders); // staff see only their own (enforced in controller)
 router.get('/:id', getOrder);
@@ -30,6 +34,8 @@ router.get('/:id', getOrder);
 // Dine-in open-tab lifecycle
 router.put('/:id/items', updateOpenOrderItems); // edit an unpaid table order's cart
 router.post('/:id/checkout', checkoutOrder);
+router.post('/:id/split', splitOpenOrder); // move some items to a new bill
+router.post('/:id/merge', mergeOpenOrders); // join another open order into this one
 router.patch('/:id/qr-status', updateQrOrderStatus); // legacy-compatible kitchen status
 router.patch('/:id/kitchen-status', updateKitchenStatus);
 router.post('/:id/kot', createKot); // finalize/bill an unpaid table order

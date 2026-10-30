@@ -22,8 +22,11 @@ import '../../core/widgets/order_flow_stepper.dart';
 enum _PaymentMethod {
   cash,
   upi,
+  card,
+  online, // delivery app (Swiggy/Zomato) order, paid on the app
   credit,
   mixed,
+  complimentary, // no-charge bill
 }
 
 class PaymentSheet extends StatefulWidget {
@@ -51,10 +54,17 @@ class _PaymentSheetState extends State<PaymentSheet> {
   final TextEditingController _mixedCreditController =
       TextEditingController();
 
+  final TextEditingController _mixedCardController = TextEditingController();
+  final TextEditingController _cardRefController = TextEditingController();
+  final TextEditingController _onlineRefController = TextEditingController();
+  final TextEditingController _complimentaryReasonController = TextEditingController();
+
+  /// Delivery apps offered for "Online" bills (from business settings).
+  List<String> _platforms = const ['Swiggy', 'Zomato'];
+  String? _onlinePlatform;
+
   bool _submitting = false;
   String? _error;
-  bool _taxEnabled = false;
-  double _taxPercent = 0;
   int _splitCount = 1;
 
   @override
@@ -68,8 +78,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
       final settings = await SettingsService().get();
       if (!mounted) return;
       setState(() {
-        _taxEnabled = settings.taxEnabled;
-        _taxPercent = settings.taxPercent;
+        if (settings.onlinePlatforms.isNotEmpty) _platforms = settings.onlinePlatforms;
       });
     } catch (_) {
       // Checkout still works if settings cannot be loaded.
@@ -90,6 +99,10 @@ class _PaymentSheetState extends State<PaymentSheet> {
     _mixedCashController.dispose();
     _mixedUpiController.dispose();
     _mixedCreditController.dispose();
+    _mixedCardController.dispose();
+    _cardRefController.dispose();
+    _onlineRefController.dispose();
+    _complimentaryReasonController.dispose();
 
     super.dispose();
   }
@@ -129,15 +142,20 @@ class _PaymentSheetState extends State<PaymentSheet> {
         0;
   }
 
+  double get _mixedCard => double.tryParse(_mixedCardController.text.trim()) ?? 0;
+
   double get _mixedTotal {
-    return _mixedCash + _mixedUpi + _mixedCredit;
+    return _mixedCash + _mixedUpi + _mixedCard + _mixedCredit;
   }
+
+  /// What this bill charges with the chosen method (complimentary = 0).
+  double _payable(CartProvider cart) => _method == _PaymentMethod.complimentary ? 0 : cart.grandTotal;
 
   Future<void> _createBill() async {
     if (_submitting) return;
 
     final cart = context.read<CartProvider>();
-    final total = cart.grandTotal;
+    final total = _payable(cart);
 
     if (cart.isEmpty) {
       setState(() {
@@ -146,10 +164,21 @@ class _PaymentSheetState extends State<PaymentSheet> {
       return;
     }
 
-    if (total <= 0) {
+    if (total <= 0 && _method != _PaymentMethod.complimentary) {
       setState(() {
-        _error = 'Bill total must be greater than zero.';
+        _error = 'Bill total must be greater than zero. For a free bill choose Complimentary.';
       });
+      return;
+    }
+
+    // Split amounts and change must match the final (server) total.
+    if (!cart.quoteIsCurrent && (_method == _PaymentMethod.mixed || _method == _PaymentMethod.cash)) {
+      setState(() => _error = 'Calculating the bill total… please tap again in a moment.');
+      return;
+    }
+
+    if (_method == _PaymentMethod.online && (_onlinePlatform == null || _onlinePlatform!.isEmpty)) {
+      setState(() => _error = 'Choose the delivery app (Swiggy / Zomato).');
       return;
     }
 
@@ -282,6 +311,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
     double? cashPortion;
     double? upiPortion;
     double? creditPortion;
+    final extra = <String, dynamic>{...cart.billAdjustments};
 
     switch (_method) {
       case _PaymentMethod.cash:
@@ -309,6 +339,24 @@ class _PaymentSheetState extends State<PaymentSheet> {
 
         break;
 
+      case _PaymentMethod.card:
+        paymentMethod = 'CARD';
+        if (_cardRefController.text.trim().isNotEmpty) extra['cardReference'] = _cardRefController.text.trim();
+        break;
+
+      case _PaymentMethod.online:
+        paymentMethod = 'ONLINE';
+        extra['onlinePlatform'] = _onlinePlatform;
+        if (_onlineRefController.text.trim().isNotEmpty) extra['onlineOrderRef'] = _onlineRefController.text.trim();
+        break;
+
+      case _PaymentMethod.complimentary:
+        paymentMethod = 'COMPLIMENTARY';
+        extra['complimentaryReason'] = _complimentaryReasonController.text.trim().isEmpty
+            ? 'Complimentary'
+            : _complimentaryReasonController.text.trim();
+        break;
+
       case _PaymentMethod.credit:
         paymentMethod = 'CREDIT';
         break;
@@ -319,6 +367,10 @@ class _PaymentSheetState extends State<PaymentSheet> {
         cashPortion = _mixedCash;
         upiPortion = _mixedUpi;
         creditPortion = _mixedCredit;
+        extra['cardPortion'] = _mixedCard;
+        if (_mixedCard > 0 && _cardRefController.text.trim().isNotEmpty) {
+          extra['cardReference'] = _cardRefController.text.trim();
+        }
 
         break;
     }
@@ -337,6 +389,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
           notes: cart.notes,
           customerId: cart.selectedCustomer?.id,
           tableCustomerLabel: cart.openOrderLabelUpdate,
+          extra: cart.billAdjustments,
         );
 
         order = await OrderService().checkoutOrder(
@@ -349,6 +402,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
           upiPortion: upiPortion,
           creditPortion: creditPortion,
           discount: cart.discount,
+          extra: extra,
         );
       }
 
@@ -384,6 +438,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
                   : null,
 
           clientRequestId: _clientRequestId,
+          extra: extra,
         );
       }
 
@@ -471,7 +526,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
         decoration: BoxDecoration(
           color: AppColors.background,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
         ),
         child: SingleChildScrollView(
           child: Column(
@@ -479,6 +534,14 @@ class _PaymentSheetState extends State<PaymentSheet> {
             crossAxisAlignment:
                 CrossAxisAlignment.stretch,
             children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
               _checkoutHeader(cart),
               _checkoutSummary(cart),
               if (cart.orderType == 'dine_in')
@@ -486,7 +549,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
               Row(
                 children: [
                   const Expanded(child: Text('Payment method', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
-                  OutlinedButton.icon(
+                  TextButton.icon(
                     onPressed: () => showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
@@ -497,47 +560,6 @@ class _PaymentSheetState extends State<PaymentSheet> {
                     label: const Text('Add items'),
                   ),
                 ],
-              ),
-              const SizedBox(height: 10),
-              // --------------------------------------------------
-              // HANDLE
-              // --------------------------------------------------
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius:
-                        BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // --------------------------------------------------
-              // TITLE
-              // --------------------------------------------------
-              Text(
-                cart.orderType == 'delivery'
-                    ? 'Delivery Payment'
-                    : 'Payment',
-                style:
-                    Theme.of(context)
-                        .textTheme
-                        .titleLarge,
-              ),
-
-              const SizedBox(height: 4),
-
-              Text(
-                'Grand Total: ${Formatters.currency(cart.grandTotal)}',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                ),
               ),
 
               // --------------------------------------------------
@@ -610,51 +632,28 @@ class _PaymentSheetState extends State<PaymentSheet> {
               // --------------------------------------------------
               // PAYMENT METHODS
               // --------------------------------------------------
-              Row(
-                children: [
-                  Expanded(
-                    child: _methodButton(
-                      'CASH',
-                      Icons.payments_outlined,
-                      AppColors.cash,
-                      _PaymentMethod.cash,
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  Expanded(
-                    child: _methodButton(
-                      'UPI',
-                      Icons.qr_code_scanner,
-                      AppColors.upi,
-                      _PaymentMethod.upi,
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  Expanded(
-                    child: _methodButton(
-                      'CREDIT',
-                      Icons
-                          .account_balance_wallet_outlined,
-                      AppColors.credit,
-                      _PaymentMethod.credit,
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  Expanded(
-                    child: _methodButton(
-                      'MIXED',
-                      Icons.call_split_outlined,
-                      AppColors.primary,
-                      _PaymentMethod.mixed,
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  const gap = 8.0;
+                  final width = (constraints.maxWidth - gap * 3) / 4;
+                  final methods = [
+                    ('CASH', Icons.payments_outlined, AppColors.cash, _PaymentMethod.cash),
+                    ('UPI', Icons.qr_code_scanner, AppColors.upi, _PaymentMethod.upi),
+                    ('CARD', Icons.credit_card, AppColors.info, _PaymentMethod.card),
+                    ('ONLINE', Icons.delivery_dining_outlined, AppColors.accent, _PaymentMethod.online),
+                    ('CREDIT', Icons.account_balance_wallet_outlined, AppColors.credit, _PaymentMethod.credit),
+                    ('MIXED', Icons.call_split_outlined, AppColors.primary, _PaymentMethod.mixed),
+                    ('FREE', Icons.card_giftcard_outlined, AppColors.warning, _PaymentMethod.complimentary),
+                  ];
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      for (final m in methods)
+                        SizedBox(width: width, child: _methodButton(m.$1, m.$2, m.$3, m.$4)),
+                    ],
+                  );
+                },
               ),
 
               const SizedBox(height: 18),
@@ -726,6 +725,68 @@ class _PaymentSheetState extends State<PaymentSheet> {
                 ),
 
               // --------------------------------------------------
+              // CARD
+              // --------------------------------------------------
+              if (_method == _PaymentMethod.card || (_method == _PaymentMethod.mixed && _mixedCard > 0))
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: TextField(
+                    controller: _cardRefController,
+                    decoration: const InputDecoration(
+                      labelText: 'Card last 4 digits / approval code (optional)',
+                      prefixIcon: Icon(Icons.credit_card),
+                    ),
+                  ),
+                ),
+
+              // --------------------------------------------------
+              // ONLINE (Swiggy / Zomato)
+              // --------------------------------------------------
+              if (_method == _PaymentMethod.online) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final platform in _platforms)
+                      ChoiceChip(
+                        label: Text(platform),
+                        selected: _onlinePlatform == platform,
+                        onSelected: (_) => setState(() {
+                          _onlinePlatform = platform;
+                          _error = null;
+                        }),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _onlineRefController,
+                  decoration: const InputDecoration(
+                    labelText: 'App order ID (optional)',
+                    prefixIcon: Icon(Icons.tag),
+                  ),
+                ),
+              ],
+
+              // --------------------------------------------------
+              // COMPLIMENTARY
+              // --------------------------------------------------
+              if (_method == _PaymentMethod.complimentary) ...[
+                TextField(
+                  controller: _complimentaryReasonController,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason (e.g. owner guest, food complaint)',
+                    prefixIcon: Icon(Icons.card_giftcard_outlined),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Items are recorded and stock is reduced, but nothing is charged.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+              ],
+
+              // --------------------------------------------------
               // CREDIT
               // --------------------------------------------------
               if (_method == _PaymentMethod.credit)
@@ -745,6 +806,9 @@ class _PaymentSheetState extends State<PaymentSheet> {
                   _mixedCredit > 0 &&
                   cart.selectedCustomer == null)
                 _buildCreditSummary(cart),
+
+              const SizedBox(height: 14),
+              _customerField(cart),
 
               // --------------------------------------------------
               // ERROR
@@ -793,12 +857,11 @@ class _PaymentSheetState extends State<PaymentSheet> {
                         ),
                       )
                     : Text(
-                        cart.orderType ==
-                                'delivery'
-                            ? 'PLACE DELIVERY ORDER'
-                            : 'CREATE BILL',
+                        '${cart.orderType == 'delivery' ? 'PLACE DELIVERY ORDER' : 'CREATE BILL'}  •  ${Formatters.currency(_payable(cart))}',
                       ),
               ),
+              const SizedBox(height: 22),
+              _moreOptions(cart),
             ],
           ),
         ),
@@ -929,11 +992,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
     await Share.share(buffer.toString());
   }
 
-  double _checkoutTax(CartProvider cart) {
-    if (!_taxEnabled || _taxPercent <= 0) return cart.grandTotal;
-    final taxable = (cart.subtotal - cart.discount).clamp(0, double.infinity).toDouble();
-    return taxable + (taxable * _taxPercent / 100);
-  }
+  double _checkoutTax(CartProvider cart) => _payable(cart);
 
   Widget _checkoutHeader(CartProvider cart) {
     return Column(
@@ -988,11 +1047,16 @@ class _PaymentSheetState extends State<PaymentSheet> {
       ][month];
 
   Widget _checkoutSummary(CartProvider cart) {
-    final taxable = (cart.subtotal - cart.discount).clamp(0, double.infinity).toDouble();
-    final tax = _taxEnabled ? taxable * _taxPercent / 100 : 0.0;
-    final total = taxable + tax;
+    final quote = cart.quoteIsCurrent ? cart.quote : null;
+    final total = _payable(cart);
     return Container(
-      padding: const EdgeInsets.fromLTRB(0, 14, 0, 4),
+      margin: const EdgeInsets.only(top: 14, bottom: 16),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1000,8 +1064,6 @@ class _PaymentSheetState extends State<PaymentSheet> {
                 padding: const EdgeInsets.symmetric(vertical: 7),
                 child: Row(
                   children: [
-                    // Quantity badge in place of an always-empty photo slot
-                    // (product photos are disabled across the POS).
                     Container(
                       width: 40,
                       height: 40,
@@ -1018,16 +1080,26 @@ class _PaymentSheetState extends State<PaymentSheet> {
               )),
           const Divider(height: 24),
           _summaryLine('Sub Total', Formatters.currency(cart.subtotal), bold: true),
-          if (_taxEnabled) ...[
-            _summaryLine('CGST (${(_taxPercent / 2).toStringAsFixed(2)}%)', Formatters.currency(tax / 2)),
-            _summaryLine('SGST (${(_taxPercent / 2).toStringAsFixed(2)}%)', Formatters.currency(tax / 2)),
-          ],
-          if (cart.discount > 0) _summaryLine('Discount', '-${Formatters.currency(cart.discount)}'),
+          // Discount, charges, CGST/SGST per rate and round-off exactly as
+          // the server will bill them.
+          if (quote != null && _method != _PaymentMethod.complimentary)
+            for (final row in quote.rows())
+              _summaryLine(row.$1, row.$2 < 0 ? '-${Formatters.currency(-row.$2)}' : Formatters.currency(row.$2))
+          else if (quote == null && cart.discount > 0)
+            _summaryLine('Discount', '-${Formatters.currency(cart.discount)}'),
+          if (_method == _PaymentMethod.complimentary) _summaryLine('Complimentary', '-${Formatters.currency(cart.subtotal)}'),
           const Divider(height: 24),
           _summaryLine('Grand Total', Formatters.currency(total), bold: true, primary: true, large: true),
-          const SizedBox(height: 4),
-          Center(child: Text('Printing is optional', style: TextStyle(color: AppColors.textMuted))),
-          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  /// Customer (needed for credit / delivery, optional otherwise).
+  Widget _customerField(CartProvider cart) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           TextField(
             readOnly: true,
             onTap: _searchAndSelectCustomer,
@@ -1037,6 +1109,15 @@ class _PaymentSheetState extends State<PaymentSheet> {
               suffixIcon: cart.selectedCustomer == null ? null : IconButton(onPressed: () => cart.setCustomer(null), icon: const Icon(Icons.close)),
             ),
           ),
+      ],
+    );
+  }
+
+  /// Bill splitting and sharing, below the main button.
+  Widget _moreOptions(CartProvider cart) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(11),
@@ -1047,7 +1128,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
                 const Row(children: [Icon(Icons.people_outline), SizedBox(width: 10), Text('Bill Splitting', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800))]),
                 const SizedBox(height: 9),
                 SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _submitting ? null : _splitBill, icon: const Icon(Icons.groups_outlined), label: Text(_splitCount > 1 ? 'Split Bill Among $_splitCount People' : 'Split Bill Among Multiple People'))),
-                if (_splitCount > 1) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Each person: ${Formatters.currency(total / _splitCount)}', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600))),
+                if (_splitCount > 1) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Each person: ${Formatters.currency(_payable(cart) / _splitCount)}', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600))),
               ],
             ),
           ),
@@ -1063,8 +1144,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
               _shareCircle(Icons.download_outlined, 'Save', cart),
             ],
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -1100,7 +1180,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
     CartProvider cart,
   ) {
     final difference =
-        cart.grandTotal - _mixedTotal;
+        _payable(cart) - _mixedTotal;
 
     final complete =
         difference.abs() < 0.01;
@@ -1165,6 +1245,19 @@ class _PaymentSheetState extends State<PaymentSheet> {
 
         const SizedBox(height: 10),
 
+        // CARD
+        TextField(
+          controller: _mixedCardController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Card Amount',
+            prefixIcon: Icon(Icons.credit_card),
+          ),
+          onChanged: (_) => setState(() => _error = null),
+        ),
+
+        const SizedBox(height: 10),
+
         // CREDIT
         TextField(
           controller:
@@ -1208,7 +1301,7 @@ class _PaymentSheetState extends State<PaymentSheet> {
               _kv(
                 'Bill Total',
                 Formatters.currency(
-                  cart.grandTotal,
+                  _payable(cart),
                 ),
               ),
 
@@ -1225,6 +1318,8 @@ class _PaymentSheetState extends State<PaymentSheet> {
                   _mixedUpi,
                 ),
               ),
+
+              _kv('Card', Formatters.currency(_mixedCard)),
 
               _kv(
                 'Credit / UDHAR',

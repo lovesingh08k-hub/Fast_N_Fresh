@@ -2,12 +2,16 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
+import '../models/business_session.dart';
 import '../models/user.dart';
 
 class AuthService {
   final Dio _dio = DioClient.instance.dio;
 
-  Future<(String token, AppUser user)> login(
+  /// [businessCode] picks the client (cafe/restaurant business); empty on
+  /// a single-cafe server.
+  Future<(String token, AppUser user, BusinessSession? session)> login(
+    String businessCode,
     String identifier,
     String password,
   ) async {
@@ -24,6 +28,7 @@ class AuthService {
         final res = await _dio.post(
           '/auth/login',
           data: {
+            if (businessCode.trim().isNotEmpty) 'businessCode': businessCode.trim().toLowerCase(),
             'identifier': identifier.trim(),
             'password': password,
           },
@@ -46,7 +51,7 @@ class AuthService {
           Map<String, dynamic>.from(rawUser),
         );
 
-        return (token, user);
+        return (token, user, BusinessSession.fromApi(data));
       } on DioException catch (e) {
         final status = e.response?.statusCode;
         final transient =
@@ -67,10 +72,16 @@ class AuthService {
     }
   }
 
-  Future<AppUser> getMe() async {
+  /// The user and, for a platform client, the current business session.
+  Future<(AppUser, BusinessSession?)> getMe({String? keepOutlet}) async {
     try {
       final res = await _dio.get('/auth/me');
-      return AppUser.fromJson(res.data['data'] as Map<String, dynamic>);
+      final data = res.data['data'] as Map<String, dynamic>;
+      final session = data['session'];
+      return (
+        AppUser.fromJson(data),
+        session is Map ? BusinessSession.fromApi(Map<String, dynamic>.from(session), keepOutlet: keepOutlet) : null,
+      );
     } catch (e) {
       throw DioClient.instance.mapError(e);
     }

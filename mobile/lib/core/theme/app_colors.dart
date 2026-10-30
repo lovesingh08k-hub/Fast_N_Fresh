@@ -25,26 +25,33 @@ class AppColors {
   static bool get isDark => _darkProgress >= .5;
   static Color _lerp(Color light, Color dark) => Color.lerp(light, dark, _darkProgress)!;
 
-  static Color get primary => _lerp(const Color(0xFF176B52), const Color(0xFF63C6A4));
-  static Color get primaryDark => _lerp(const Color(0xFF0F5540), const Color(0xFF3FAE88));
-  static Color get primaryLight => _lerp(const Color(0xFFE7F3EE), const Color(0xFF173A31));
-  static Color get accent => _lerp(const Color(0xFFC98B36), const Color(0xFFE5B66A));
-  static Color get background => _lerp(const Color(0xFFF7F8F6), const Color(0xFF101312));
-  static Color get surface => _lerp(Colors.white, const Color(0xFF181C1A));
-  static Color get surfaceElevated => _lerp(Colors.white, const Color(0xFF202522));
-  static Color get textPrimary => _lerp(const Color(0xFF1C211F), const Color(0xFFF1F4F2));
-  static Color get textSecondary => _lerp(const Color(0xFF66706B), const Color(0xFFB3BCB8));
-  static Color get textMuted => _lerp(const Color(0xFF929A96), const Color(0xFF7F8A85));
-  static Color get border => _lerp(const Color(0xFFE1E5E2), const Color(0xFF2A322E));
-  static Color get divider => _lerp(const Color(0xFFEAEEEB), const Color(0xFF252B28));
+  // Brand: warm saffron-coral (Indian restaurant feel) on soft grey, white
+  // cards with gentle shadows. Keep in sync with AppTheme._build.
+  static Color get primary => _lerp(const Color(0xFFF2643D), const Color(0xFFFF8A65));
+  static Color get primaryDark => _lerp(const Color(0xFFD9482A), const Color(0xFFFF7043));
+  static Color get primaryLight => _lerp(const Color(0xFFFFEDE7), const Color(0xFF3A2219));
+  static Color get accent => _lerp(const Color(0xFFF5A524), const Color(0xFFFFC266));
+  static Color get background => _lerp(const Color(0xFFF4F4F6), const Color(0xFF0F1012));
+  static Color get surface => _lerp(Colors.white, const Color(0xFF1A1B1F));
+  static Color get surfaceElevated => _lerp(Colors.white, const Color(0xFF232429));
+  static Color get textPrimary => _lerp(const Color(0xFF1B1D22), const Color(0xFFF3F3F5));
+  static Color get textSecondary => _lerp(const Color(0xFF6B6F7A), const Color(0xFFB4B6BE));
+  static Color get textMuted => _lerp(const Color(0xFF9CA0AA), const Color(0xFF7D808A));
+  static Color get border => _lerp(const Color(0xFFEBEBEF), const Color(0xFF2C2D33));
+  static Color get divider => _lerp(const Color(0xFFF0F0F3), const Color(0xFF26272C));
 
-  static Color success = const Color(0xFF4FA879);
-  static Color danger = const Color(0xFFC85C5C);
-  static Color warning = const Color(0xFFD6A04D);
-  static Color info = const Color(0xFF628EC5);
-  static Color cash = const Color(0xFF4FA879);
-  static Color upi = const Color(0xFF628EC5);
-  static Color credit = const Color(0xFF9A7CB8);
+  static Color success = const Color(0xFF1FA463);
+  static Color danger = const Color(0xFFE5484D);
+  static Color warning = const Color(0xFFF59E0B);
+  static Color info = const Color(0xFF3B82F6);
+  static Color cash = const Color(0xFF1FA463);
+  static Color upi = const Color(0xFF6366F1);
+  static Color credit = const Color(0xFFA855F7);
 
-  static Color get cardShadow => _darkProgress > .01 ? Colors.transparent : const Color(0x12000000);
+  /// Indian food marks: green = veg, red = non-veg, amber = egg.
+  static const Color veg = Color(0xFF16A34A);
+  static const Color nonVeg = Color(0xFFDC2626);
+  static const Color egg = Color(0xFFF59E0B);
+
+  static Color get cardShadow => _darkProgress > .01 ? Colors.transparent : const Color(0x0F1B1D22);
 }

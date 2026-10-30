@@ -9,6 +9,9 @@ class CafeTable {
   final DateTime? latestOpenOrderAt;
   final int? number;
 
+  /// Floor / section, e.g. "Ground Floor"; empty when not set.
+  final String area;
+
   CafeTable({
     required this.id,
     required this.name,
@@ -19,6 +22,7 @@ class CafeTable {
     this.openItemCount = 0,
     this.latestOpenOrderAt,
     this.number,
+    this.area = '',
   });
 
   bool get isOccupied => liveStatus == 'occupied';
@@ -37,6 +41,7 @@ class CafeTable {
       openItemCount: (json['openItemCount'] as num?)?.toInt() ?? 0,
       latestOpenOrderAt: DateTime.tryParse(json['latestOpenOrderAt'] as String? ?? ''),
       number: (json['number'] as num?)?.toInt(),
+      area: json['area'] as String? ?? '',
     );
   }
 }

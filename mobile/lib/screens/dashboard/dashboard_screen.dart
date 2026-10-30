@@ -9,7 +9,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/api_config.dart';
+import '../../core/widgets/archive_due_banner.dart';
 import '../../core/widgets/fresh_ui.dart';
+import '../../core/widgets/pos_ui.dart';
+import '../orders/bill_history_screen.dart';
+import 'home_widgets.dart';
+import 'notifications_sheet.dart';
 import '../../core/widgets/state_widgets.dart';
 import '../../models/dashboard_models.dart';
 import '../../services/dashboard_service.dart';
@@ -70,6 +75,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    // Popular Dishes shows menu photos and prices.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<CatalogProvider>().ensureLoaded();
+    });
     // QR orders are created outside the staff app, so the dashboard must
     // refresh periodically instead of waiting for the user to revisit the
     // tab. This keeps the Orders card and Recent Orders live.
@@ -203,30 +212,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  Future<void> _refreshWholeApp() async {
-    final bus = context.read<TabRefreshBus>();
-    await bus.refreshWholeApp(
-      beforeRebuild: () async {
-        await Future.wait([
-          context.read<AuthProvider>().checkSessionOnResume(),
-          context.read<CatalogProvider>().load(),
-        ]);
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final userName = context.watch<AuthProvider>().currentUser?.name ?? 'Admin';
 
-    final hour = DateTime.now().hour;
-
-    // After midnight the cafe is still in its evening shift.
-    final greeting = hour < 4
-        ? 'Good evening'
-        : hour < 12
-            ? 'Good morning'
-            : (hour < 17 ? 'Good afternoon' : 'Good evening');
 
     // Only when BOTH sections have never loaded anything at all do we show
     // a full-page state. Any other combination (one loaded, one didn't;
@@ -262,10 +252,53 @@ class _DashboardScreenState extends State<DashboardScreen>
             24,
           ),
           children: [
-            _buildGreeting(greeting, userName, hour),
-            const SizedBox(height: 14),
-            _buildStatsBlock(),
-            const SizedBox(height: 20),
+            HomeGreeting(userName: userName),
+            const ArchiveDueBanner(),
+            const SizedBox(height: 16),
+            if (_data != null) ...[
+              TodaySalesCard(today: _data!.today, yesterdaySales: _overview?.yesterday.sales),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: MiniStatCard(
+                      icon: Icons.local_fire_department_rounded,
+                      color: AppColors.primary,
+                      label: 'Running orders',
+                      value: '${_data!.runningOrders}',
+                      note: _data!.runningOrders == 0
+                          ? 'No open bills'
+                          : '${Formatters.currency(_data!.runningValue)} unbilled',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: MiniStatCard(
+                      icon: Icons.account_balance_wallet_rounded,
+                      color: AppColors.credit,
+                      label: 'Udhar due',
+                      value: Formatters.currency(_data!.outstandingCreditTotal),
+                      note: '${_data!.outstandingCreditCustomerCount} customer${_data!.outstandingCreditCustomerCount == 1 ? '' : 's'}',
+                    ),
+                  ),
+                ],
+              ),
+              if (_data!.lowStockCount > 0) ...[
+                const SizedBox(height: 12),
+                _lowStockBanner(_data!.lowStockCount),
+              ],
+            ] else if (_statsError != null)
+              InlineRetryBanner(message: _statsError!, onRetry: _loadStats),
+            const SizedBox(height: 16),
+            QuickActions(
+              onOrders: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BillHistoryScreen()),
+              ),
+            ),
+            const SizedBox(height: 22),
+            const SectionTitle('Popular Dishes'),
+            PopularDishes(products: _data?.topSellingProducts ?? const []),
+            const SizedBox(height: 22),
             _buildSalesOverviewBlock(),
             const SizedBox(height: 20),
             _buildOrdersAndProductsBlock(),
@@ -274,81 +307,38 @@ class _DashboardScreenState extends State<DashboardScreen>
       );
     }
 
-    final user = context.watch<AuthProvider>().currentUser;
-    final role = user?.isAdmin == true
-        ? 'Admin'
-        : user?.isManager == true
-            ? 'Manager'
-            : 'Staff';
-
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 12, 4),
-              child: Row(
-                children: [
-                  Text(
-                    'Overview',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -.2,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: FreshUi.mint.withValues(alpha: .13),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      role,
-                      style: const TextStyle(
-                        color: FreshUi.mint,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+              child: HomeHeader(
+                actions: [
+                  Builder(builder: (context) {
+                    final notices = _data == null ? const <HomeNotice>[] : HomeNotice.fromDashboard(context, _data!);
+                    final unread = notices.where((n) => n.unread).length;
+                    return HeaderCircleButton(
+                      icon: Icons.notifications_none_rounded,
+                      tooltip: 'Notifications',
+                      onTap: () => showNotificationsSheet(context, notices),
+                      child: Badge(
+                        isLabelVisible: unread > 0,
+                        label: Text('$unread'),
+                        backgroundColor: AppColors.primary,
+                        child: Icon(Icons.notifications_none_rounded, size: 21, color: AppColors.textPrimary),
                       ),
-                    ),
-                  ),
-                  const Spacer(),
+                    );
+                  }),
                   Consumer<ThemeProvider>(
-                    builder: (context, theme, _) => Tooltip(
-                      message: theme.isDark
-                          ? 'Switch to light mode'
-                          : 'Switch to dark mode',
-                      child: InkWell(
-                        onTap: () => changeThemeWithReveal(
-                          context,
-                          theme.isDark ? AppThemeMode.light : AppThemeMode.dark,
-                          originContext: context,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        child: _squareIcon(theme.isDark
-                            ? Icons.light_mode_outlined
-                            : Icons.dark_mode_outlined),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Consumer<TabRefreshBus>(
-                    builder: (_, bus, __) => Tooltip(
-                      message: 'Refresh',
-                      child: InkWell(
-                        onTap: bus.isRefreshing ? null : _refreshWholeApp,
-                        borderRadius: BorderRadius.circular(14),
-                        child: bus.isRefreshing
-                            ? _squareChild(const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2)))
-                            : _squareIcon(Icons.refresh_rounded),
+                    builder: (context, theme, _) => HeaderCircleButton(
+                      icon: theme.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                      tooltip: theme.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+                      onTap: () => changeThemeWithReveal(
+                        context,
+                        theme.isDark ? AppThemeMode.light : AppThemeMode.dark,
+                        originContext: context,
                       ),
                     ),
                   ),
@@ -362,398 +352,22 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _squareIcon(IconData icon) =>
-      _squareChild(Icon(icon, size: 20, color: AppColors.textPrimary));
-
-  Widget _squareChild(Widget child) {
+  Widget _lowStockBanner(int count) {
     return Container(
-      width: 36,
-      height: 36,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: child,
-    );
-  }
-
-  Widget _buildGreeting(String greeting, String userName, int hour) {
-    final icon = hour >= 4 && hour < 12
-        ? Icons.wb_twilight_rounded
-        : hour >= 12 && hour < 17
-            ? Icons.wb_sunny_outlined
-            : Icons.nights_stay_outlined;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: FreshUi.mint, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(text: '$greeting, '),
-                  TextSpan(
-                    text: userName,
-                    style: const TextStyle(color: FreshUi.mintBright),
-                  ),
-                ]),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          "Here's what's happening with your business today.",
-          style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // STATS + ALERTS (from GET /dashboard) -- one independent section
-  // ---------------------------------------------------------------------------
-
-  Widget _buildStatsBlock() {
-    if (_data != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_statsError != null) ...[
-            InlineRetryBanner(
-              message: 'Could not refresh stats. Showing last known data.',
-              onRetry: _loadStats,
-            ),
-            const SizedBox(height: 12),
-          ],
-          _buildStatsGrid(),
-          const SizedBox(height: 20),
-          _buildAlerts(),
-        ],
-      );
-    }
-
-    if (_loadingStats) {
-      return const SectionLoadingBox(height: 220);
-    }
-
-    return SectionErrorBox(
-      message: _statsError ?? 'Could not load dashboard stats.',
-      onRetry: _loadStats,
-    );
-  }
-
-  Widget _buildStatsGrid() {
-    final d = _data!;
-    final yesterday = _overview?.yesterday;
-    const blue = Color(0xFF3B82F6);
-    const purple = Color(0xFF9B6BE0);
-
-    final sparkline = _overview?.last14Days ?? const <DailySales>[];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final isSmallPhone = width < 390;
-
-        return GridView.count(
-          // All four tiles in one row on a wide (web/tablet) screen.
-          crossAxisCount: width >= 900 ? 4 : 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          // More vertical space on smaller screens.
-          childAspectRatio: isSmallPhone ? 1.45 : 1.7,
-          children: [
-            _statCard(
-              color: FreshUi.mint,
-              icon: Icons.currency_rupee_rounded,
-              label: "Today's Sales",
-              value: Formatters.currency(d.today.sales),
-              decoration: sparkline.length < 2
-                  ? null
-                  : _sparkline(sparkline.map((e) => e.sales).toList()),
-              footer: _trend(d.today.sales, yesterday?.sales),
-            ),
-            _statCard(
-              color: blue,
-              icon: Icons.receipt_long_outlined,
-              label: 'Orders',
-              value: '${d.today.orders}',
-              decoration:
-                  const Icon(Icons.bar_chart_rounded, color: blue, size: 26),
-              footer: _trend(
-                  d.today.orders.toDouble(), yesterday?.orders.toDouble()),
-            ),
-            // Total udhar still owed by all customers (not just today's
-            // credit sales), which is what this card is read as.
-            _statCard(
-              color: purple,
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'UDHAR due',
-              value: Formatters.currency(d.outstandingCreditTotal),
-              decoration: Icon(Icons.account_balance_wallet_outlined,
-                  color: purple.withValues(alpha: .7), size: 26),
-              footer: _footerNote(
-                d.outstandingCreditCustomerCount > 0
-                    ? '${d.outstandingCreditCustomerCount} customer${d.outstandingCreditCustomerCount == 1 ? '' : 's'}'
-                    : 'No pending dues',
-              ),
-            ),
-            _statCard(
-              color: FreshUi.amber,
-              icon: Icons.inventory_2_outlined,
-              label: 'Low Stock',
-              value:
-                  '${d.lowStockCount} item${d.lowStockCount == 1 ? '' : 's'}',
-              decoration: Icon(
-                  d.lowStockCount > 0
-                      ? Icons.warning_amber_rounded
-                      : Icons.check_box_outlined,
-                  color: FreshUi.amber.withValues(alpha: .8),
-                  size: 26),
-              footer: _footerNote(
-                  d.lowStockCount > 0 ? 'Needs restock' : 'All good'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _statCard({
-    required Color color,
-    required IconData icon,
-    required String label,
-    required String value,
-    required Widget footer,
-    Widget? decoration,
-  }) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-      decoration: FreshUi.card(tint: color, tintStrength: .06),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: .15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary),
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary),
-                  ),
-                ),
-              ),
-              if (decoration != null) ...[
-                const SizedBox(width: 6),
-                SizedBox(width: 52, height: 28, child: decoration),
-              ],
-            ],
-          ),
-          const SizedBox(height: 4),
-          footer,
-        ],
-      ),
-    );
-  }
-
-  Widget _sparkline(List<double> values) {
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
-        lineTouchData: const LineTouchData(enabled: false),
-        lineBarsData: [
-          LineChartBarData(
-            spots: [
-              for (int i = 0; i < values.length; i++)
-                FlSpot(i.toDouble(), values[i]),
-            ],
-            isCurved: true,
-            color: FreshUi.mint,
-            barWidth: 2,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  FreshUi.mint.withValues(alpha: .35),
-                  FreshUi.mint.withValues(alpha: 0),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// "+12% vs. yesterday". Hidden until yesterday's numbers are known, and
-  /// when there was nothing yesterday to compare against.
-  Widget _trend(double today, double? yesterday) {
-    if (yesterday == null || yesterday <= 0) {
-      return _footerNote('vs. yesterday: —');
-    }
-    final change = ((today - yesterday) / yesterday * 100).round();
-    final up = change >= 0;
-    final color = up ? FreshUi.mint : FreshUi.red;
-    return Row(
-      children: [
-        Icon(up ? Icons.north_east_rounded : Icons.south_east_rounded,
-            size: 13, color: color),
-        const SizedBox(width: 4),
-        Text('${up ? '+' : ''}$change%',
-            style: TextStyle(
-                color: color, fontSize: 11.5, fontWeight: FontWeight.w700)),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text('vs. yesterday',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
-        ),
-      ],
-    );
-  }
-
-  Widget _footerNote(String text) {
-    return Row(
-      children: [
-        Container(width: 8, height: 1.5, color: AppColors.textMuted),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // ALERTS
-  // ---------------------------------------------------------------------------
-
-  Widget _buildAlerts() {
-    final d = _data!;
-
-    final alerts = <Widget>[];
-
-    if (d.lowStockCount > 0) {
-      alerts.add(
-        _alertTile(
-          Icons.warning_amber_rounded,
-          AppColors.warning,
-          '${d.lowStockCount} products are low on stock',
-        ),
-      );
-    }
-
-    if (d.outstandingCreditTotal > 0) {
-      alerts.add(
-        _alertTile(
-          Icons.account_balance_wallet_outlined,
-          AppColors.credit,
-          '${Formatters.currency(d.outstandingCreditTotal)} outstanding from ${d.outstandingCreditCustomerCount} customers',
-        ),
-      );
-    }
-
-    if (alerts.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Alerts',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 10),
-        ...alerts,
-      ],
-    );
-  }
-
-  Widget _alertTile(
-    IconData icon,
-    Color color,
-    String text,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.warning.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.warning.withValues(alpha: .3)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            color: color,
-            size: 20,
-          ),
+          Icon(Icons.inventory_2_outlined, color: AppColors.warning),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              text,
-              style: TextStyle(
-                color: color.withValues(alpha: 0.95),
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
+              '$count item${count == 1 ? ' is' : 's are'} running low on stock',
+              style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
             ),
           ),
         ],

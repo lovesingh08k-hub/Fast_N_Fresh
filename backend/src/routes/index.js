@@ -25,6 +25,8 @@ router.use('/feedback', require('./feedbackRoutes'));
 router.use('/kds', require('./kdsRoutes'));
 router.use('/maintenance', require('./maintenanceRoutes'));
 router.use('/manager', require('./managerRoutes'));
+router.use('/platform', require('./platformRoutes'));
+router.use('/archive', require('./archiveRoutes'));
 
 router.get('/health', (req, res) => res.json({ success: true, message: 'PWP POS — Personalize Web Page API is running.' }));
 

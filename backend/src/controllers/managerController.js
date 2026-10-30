@@ -33,7 +33,7 @@ const getDaySummary = asyncHandler(async (req,res)=>{
   const cashOut=r(movements.filter(x=>x.type==='OUT').reduce((s,x)=>s+n(x.amount),0));
   const upiRefunds=r(refunds.filter(x=>x.method==='UPI').reduce((s,x)=>s+n(x.amount),0));
   const opening=n(shift?.openingCash); const expected=r(opening+cashSales+cashIn-cashExpenses-cashOut-cashRefunds);
-  res.json({success:true,data:{date, sales:r(orders.reduce((s,o)=>s+n(o.grandTotal),0)), orders:orders.length, cashSales, upi:r(orders.reduce((s,o)=>s+n(o.paymentBreakdown?.upi),0)), credit:r(orders.reduce((s,o)=>s+n(o.paymentBreakdown?.credit),0)), cashExpenses, cashIn, cashOut, openingCash:opening, expectedCash:expected, cashRefunds, upiRefunds, pendingKitchen, shift:shift||null, closed:shift?.status==='closed', expenses, movements}});
+  res.json({success:true,data:{date, sales:r(orders.reduce((s,o)=>s+n(o.grandTotal),0)), orders:orders.length, cashSales, upi:r(orders.reduce((s,o)=>s+n(o.paymentBreakdown?.upi),0)), credit:r(orders.reduce((s,o)=>s+n(o.paymentBreakdown?.credit),0)), card:r(orders.reduce((s,o)=>s+n(o.paymentBreakdown?.card),0)), online:r(orders.reduce((s,o)=>s+n(o.paymentBreakdown?.online),0)), cashExpenses, cashIn, cashOut, openingCash:opening, expectedCash:expected, cashRefunds, upiRefunds, pendingKitchen, shift:shift||null, closed:shift?.status==='closed', expenses, movements}});
 });
 
 const openDay = asyncHandler(async(req,res)=>{

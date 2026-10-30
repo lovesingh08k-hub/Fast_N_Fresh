@@ -2,38 +2,49 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Shared minimal look for the redesigned screens (Home, New Order, Orders,
-/// Bills, QR Management, More): flat surfaces, thin tinted borders and mint
-/// accents, with no glows or heavy gradients so light and dark mode both stay
-/// clean. Background/surface/text come from [AppColors].
+/// Shared look for the redesigned screens: white rounded cards with a soft
+/// shadow on a light grey page, saffron-coral brand accents, green for
+/// "available/success". Background/surface/text come from [AppColors].
 class FreshUi {
   FreshUi._();
 
-  static const Color mint = Color(0xFF22A876);
-  static const Color mintBright = Color(0xFF2FBF8A);
-  static const Color amber = Color(0xFFD99A2B);
-  static const Color red = Color(0xFFD9474D);
+  /// Brand accent (saffron-coral). The name is kept from the old palette.
+  static const Color mint = Color(0xFFF2643D);
+  static const Color mintBright = Color(0xFFFF7A52);
+  static const Color green = Color(0xFF1FA463);
+  static const Color amber = Color(0xFFF59E0B);
+  static const Color red = Color(0xFFE5484D);
 
+  /// Main call-to-action fill (brand).
   static const LinearGradient greenGradient = LinearGradient(
-    colors: [Color(0xFF1C9C6C), Color(0xFF178A5F)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFFF7A52), Color(0xFFF2643D)],
   );
 
   static const LinearGradient redGradient = LinearGradient(
-    colors: [Color(0xFFCF3F46), Color(0xFFB8333B)],
+    colors: [Color(0xFFEF5A5F), Color(0xFFE5484D)],
   );
 
   static const LinearGradient amberGradient = LinearGradient(
-    colors: [Color(0xFFD99A2B), Color(0xFFC38722)],
+    colors: [Color(0xFFFBB33A), Color(0xFFF59E0B)],
   );
 
-  /// Flat card with a thin [tint]-coloured border and an optional faint wash.
-  static BoxDecoration card({Color tint = mint, double radius = 14, double tintStrength = 0}) {
+  /// Soft shadow under white cards (none in dark mode).
+  static List<BoxShadow> get shadow => [
+        BoxShadow(color: AppColors.cardShadow, blurRadius: 18, offset: const Offset(0, 6)),
+      ];
+
+  /// White rounded card with a soft shadow; [tint] adds a faint colour wash
+  /// and border (used for status-coloured cards).
+  static BoxDecoration card({Color? tint, double radius = 18, double tintStrength = 0}) {
     return BoxDecoration(
-      color: tintStrength > 0
+      color: tint != null && tintStrength > 0
           ? Color.alphaBlend(tint.withValues(alpha: tintStrength), AppColors.surface)
           : AppColors.surface,
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: tint.withValues(alpha: .28)),
+      border: Border.all(color: tint != null && tintStrength > 0 ? tint.withValues(alpha: .25) : AppColors.border),
+      boxShadow: shadow,
     );
   }
 }

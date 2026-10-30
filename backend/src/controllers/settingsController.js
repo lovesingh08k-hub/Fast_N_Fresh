@@ -23,6 +23,17 @@ const updateSettings = asyncHandler(async (req, res) => {
     'defaultDiscount',
     'currencySymbol',
     'primaryColor',
+    'taxInclusive',
+    'gstType',
+    'fssai',
+    'invoicePrefix',
+    'roundOff',
+    'serviceChargePercent',
+    'serviceChargeOn',
+    'packagingCharge',
+    'packagingChargeOn',
+    'deliveryCharge',
+    'onlinePlatforms',
   ];
   editable.forEach((field) => {
     if (req.body[field] !== undefined) settings[field] = req.body[field];

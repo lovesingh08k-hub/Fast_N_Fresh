@@ -21,6 +21,25 @@ const businessSettingsSchema = new mongoose.Schema(
 
     primaryColor: { type: String, default: '#0E7C5A' },
 
+    // ---- Billing (see services/billing.js)
+    // taxPercent above is the default GST rate (items can have their own);
+    // gstNumber is the GSTIN printed on the bill.
+    taxInclusive: { type: Boolean, default: false }, // menu prices already include GST
+    gstType: { type: String, enum: ['cgst_sgst', 'igst'], default: 'cgst_sgst' },
+    fssai: { type: String, trim: true, default: '' },
+    invoicePrefix: { type: String, trim: true, default: 'INV' },
+    roundOff: { type: Boolean, default: true }, // round the bill to the nearest rupee
+    serviceChargePercent: { type: Number, default: 0, min: 0, max: 30 },
+    serviceChargeOn: { type: [String], default: ['dine_in'] },
+    packagingCharge: { type: Number, default: 0, min: 0 },
+    packagingChargeOn: { type: [String], default: ['takeaway', 'delivery'] },
+    deliveryCharge: { type: Number, default: 0, min: 0 },
+    // Delivery apps whose orders are billed as "Online" payments.
+    onlinePlatforms: { type: [String], default: ['Swiggy', 'Zomato'] },
+
+    // Last time old records were exported and deleted (archiveController).
+    lastArchiveAt: { type: Date, default: null },
+
     // Takeaway (T1, T2...) and Delivery (D1, D2...) counters shown like
     // dine-in tables. Managed through /api/counters, not updateSettings.
     takeawayCounters: { type: [Number], default: [1, 2, 3, 4] },

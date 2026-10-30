@@ -17,6 +17,7 @@ class _TableFormScreenState extends State<TableFormScreen> {
   final _service = TableService();
   late final TextEditingController _nameController;
   late final TextEditingController _capacityController;
+  late final TextEditingController _areaController;
   late final TextEditingController _qrNumberController;
   String _status = 'available';
   bool _saving = false;
@@ -29,6 +30,7 @@ class _TableFormScreenState extends State<TableFormScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.table?.name ?? '');
     _capacityController = TextEditingController(text: (widget.table?.capacity ?? 4).toString());
+    _areaController = TextEditingController(text: widget.table?.area ?? '');
     _qrNumberController = TextEditingController(text: widget.table?.number?.toString() ?? '');
     _status = widget.table?.status ?? 'available';
   }
@@ -37,6 +39,7 @@ class _TableFormScreenState extends State<TableFormScreen> {
   void dispose() {
     _nameController.dispose();
     _capacityController.dispose();
+    _areaController.dispose();
     _qrNumberController.dispose();
     super.dispose();
   }
@@ -54,11 +57,16 @@ class _TableFormScreenState extends State<TableFormScreen> {
         await _service.update(widget.table!.id, {
           'name': _nameController.text.trim(),
           'capacity': int.tryParse(_capacityController.text) ?? 4,
+          'area': _areaController.text.trim(),
           'status': _status,
           'number': qrText.isEmpty ? null : (int.tryParse(qrText) ?? widget.table?.number),
         });
       } else {
-        await _service.create(name: _nameController.text.trim(), capacity: int.tryParse(_capacityController.text) ?? 4);
+        await _service.create(
+          name: _nameController.text.trim(),
+          capacity: int.tryParse(_capacityController.text) ?? 4,
+          area: _areaController.text,
+        );
       }
       if (mounted) Navigator.pop(context, true);
     } on ApiException catch (e) {
@@ -114,6 +122,15 @@ class _TableFormScreenState extends State<TableFormScreen> {
               controller: _capacityController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'Capacity (seats)'),
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _areaController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Floor / area (optional)',
+                hintText: 'e.g. Ground Floor, Rooftop, AC Hall',
+              ),
             ),
             if (_isEditing) ...[
               const SizedBox(height: 14),

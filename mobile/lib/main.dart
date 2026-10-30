@@ -51,6 +51,12 @@ void main() async {
   await themeProvider.load();
 
   DioClient.instance.onUnauthorized = authProvider.forceLogout;
+  DioClient.instance.onLicenceInactive = (message) {
+    // Close every open page so the blocked screen (shown at the root) is
+    // what the user sees.
+    PwpPosApp.navigatorKey.currentState?.popUntil((route) => route.isFirst);
+    authProvider.onLicenceInactive(message);
+  };
 
   runApp(
     MultiProvider(

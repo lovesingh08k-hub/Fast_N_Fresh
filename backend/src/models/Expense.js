@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const userRef = require('./userRef');
 
 const expenseSchema = new mongoose.Schema(
   {
@@ -12,7 +13,7 @@ const expenseSchema = new mongoose.Schema(
     paymentMethod: { type: String, enum: ['CASH', 'UPI', 'BANK', 'CARD'], default: 'CASH', index: true },
     date: { type: Date, required: true, default: Date.now },
     notes: { type: String, trim: true },
-    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef, required: true },
   },
   { timestamps: true }
 );

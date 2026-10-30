@@ -3,13 +3,17 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../core/network/dio_client.dart';
 import '../core/network/token_storage.dart';
 import '../core/network/api_exception.dart';
+import '../models/business_session.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/push_notification_service.dart';
 
-enum AuthStatus { unknown, authenticated, unauthenticated }
+/// [licenceInactive]: logged in, but the business's subscription is
+/// suspended or expired, so the app shows a blocking screen.
+enum AuthStatus { unknown, authenticated, unauthenticated, licenceInactive }
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -17,6 +21,12 @@ class AuthProvider extends ChangeNotifier {
   AuthStatus status = AuthStatus.unknown;
   AppUser? currentUser;
   String? errorMessage;
+
+  /// Business, outlets and current outlet (null on a single-cafe server).
+  BusinessSession? session;
+
+  /// Why the business is blocked, when [status] is licenceInactive.
+  String? licenceMessage;
   bool isLoading = false;
 
   bool _restoreInProgress = false;
@@ -24,6 +34,51 @@ class AuthProvider extends ChangeNotifier {
   bool _logoutInProgress = false;
 
   bool get isAdmin => currentUser?.isAdmin ?? false;
+
+  OutletInfo? get currentOutlet => session?.currentOutlet;
+
+  /// Changes whenever the user logs in or switches outlet, so screens
+  /// holding outlet data can be rebuilt from scratch.
+  String get sessionKey => '${currentUser?.id}:${session?.code}:${session?.currentOutletCode}';
+
+  void _applySession(BusinessSession? value) {
+    session = value;
+    DioClient.instance.outletCode = value?.currentOutletCode;
+  }
+
+  Future<void> _saveSession() async {
+    final value = session;
+    if (value == null) return;
+    await TokenStorage.instance.saveSessionJson(jsonEncode(value.toJson()));
+  }
+
+  /// Switches the app to another outlet of the business.
+  Future<void> switchOutlet(String outletCode) async {
+    final value = session;
+    if (value == null || value.currentOutletCode == outletCode) return;
+    _applySession(value.withOutlet(outletCode));
+    await _saveSession();
+    notifyListeners();
+  }
+
+  /// Called by the network layer when the server says the subscription is
+  /// not active (suspended / expired / outlet turned off).
+  void onLicenceInactive(String message) {
+    if (status == AuthStatus.unauthenticated) return;
+    licenceMessage = message;
+    status = AuthStatus.licenceInactive;
+    notifyListeners();
+  }
+
+  /// "Try again" on the blocked screen: re-checks the session.
+  Future<void> recheckLicence() async {
+    try {
+      await _validateServerSession();
+      licenceMessage = null;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) await _performLogout();
+    } catch (_) {}
+  }
 
   /// Restores the cached session during application startup.
   ///
@@ -54,10 +109,12 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _restoreSessionInner() async {
     String? token;
     String? userJson;
+    String? sessionJson;
 
     try {
       token = await TokenStorage.instance.readToken();
       userJson = await TokenStorage.instance.readUserJson();
+      sessionJson = await TokenStorage.instance.readSessionJson();
     } catch (_) {
       status = AuthStatus.unauthenticated;
       notifyListeners();
@@ -85,6 +142,10 @@ class AuthProvider extends ChangeNotifier {
       }
 
       currentUser = AppUser.fromJson(decoded);
+      if (sessionJson != null && sessionJson.isNotEmpty) {
+        final rawSession = jsonDecode(sessionJson);
+        if (rawSession is Map<String, dynamic>) _applySession(BusinessSession.fromJson(rawSession));
+      }
 
       // Show the cached authenticated state immediately.
       status = AuthStatus.authenticated;
@@ -131,9 +192,14 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _validateServerSession() async {
-    final freshUser = await _authService.getMe();
+    final (freshUser, freshSession) =
+        await _authService.getMe(keepOutlet: session?.currentOutletCode);
 
     currentUser = freshUser;
+    if (freshSession != null) {
+      _applySession(freshSession);
+      await _saveSession();
+    }
 
     await TokenStorage.instance.saveUserJson(
       jsonEncode(freshUser.toJson()),
@@ -146,7 +212,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> login(String identifier, String password) async {
+  Future<bool> login(String businessCode, String identifier, String password) async {
     if (isLoading) return false;
 
     isLoading = true;
@@ -154,15 +220,18 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final (token, user) =
-          await _authService.login(identifier, password);
+      final (token, user, newSession) =
+          await _authService.login(businessCode, identifier, password);
 
       await TokenStorage.instance.saveToken(token);
       await TokenStorage.instance.saveUserJson(
         jsonEncode(user.toJson()),
       );
+      _applySession(newSession);
+      await _saveSession();
 
       currentUser = user;
+      licenceMessage = null;
       status = AuthStatus.authenticated;
       isLoading = false;
 
@@ -214,6 +283,8 @@ class AuthProvider extends ChangeNotifier {
     }
 
     currentUser = null;
+    _applySession(null);
+    licenceMessage = null;
     status = AuthStatus.unauthenticated;
     errorMessage = null;
 

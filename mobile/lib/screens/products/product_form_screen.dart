@@ -23,6 +23,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final TextEditingController _priceController;
   late final TextEditingController _stockController;
   late final TextEditingController _thresholdController;
+  late final TextEditingController _taxRateController;
+  late final TextEditingController _descriptionController;
+  String _foodType = '';
 
   String? _categoryId;
   bool _trackInventory = true;
@@ -41,6 +44,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _priceController = TextEditingController(text: p != null ? p.sellingPrice.toString() : '');
     _stockController = TextEditingController(text: p != null ? p.stock.toString() : '0');
     _thresholdController = TextEditingController(text: p != null ? p.lowStockThreshold.toString() : '10');
+    final rate = p?.taxRate;
+    _descriptionController = TextEditingController(text: p?.description ?? '');
+    _foodType = p?.foodType ?? '';
+    _taxRateController = TextEditingController(
+      text: rate == null ? '' : (rate == rate.roundToDouble() ? rate.toStringAsFixed(0) : rate.toString()),
+    );
     _categoryId = p?.categoryId ?? (widget.categories.isNotEmpty ? widget.categories.first.id : null);
     _trackInventory = p?.trackInventory ?? true;
     _available = p?.isAvailable ?? true;
@@ -53,6 +62,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _priceController.dispose();
     _stockController.dispose();
     _thresholdController.dispose();
+    _taxRateController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
@@ -77,6 +88,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       'trackInventory': _trackInventory,
       'status': _available ? 'available' : 'unavailable',
       'imageUrl': _imageUrl,
+      'description': _descriptionController.text.trim(),
+      'foodType': _foodType,
+      // Empty = the outlet's default GST rate.
+      'taxRate': _taxRateController.text.trim().isEmpty ? '' : double.tryParse(_taxRateController.text.trim()),
     };
 
     try {
@@ -107,6 +122,28 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               decoration: const InputDecoration(labelText: 'Product Name'),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
             ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _descriptionController,
+              maxLength: 160,
+              decoration: const InputDecoration(
+                labelText: 'Short description (optional)',
+                hintText: 'e.g. Cheesy, served with mint chutney',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 'veg', label: Text('Veg')),
+                ButtonSegment(value: 'non_veg', label: Text('Non-veg')),
+                ButtonSegment(value: 'egg', label: Text('Egg')),
+                ButtonSegment(value: '', label: Text('None')),
+              ],
+              selected: {_foodType},
+              onSelectionChanged: (v) => setState(() => _foodType = v.first),
+            ),
             const SizedBox(height: 16),
             ProductImagePicker(initialImageUrl: _imageUrl, onUploaded: (url) => setState(() => _imageUrl = url)),
             const SizedBox(height: 14),
@@ -124,6 +161,22 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               validator: (v) {
                 final val = double.tryParse(v ?? '');
                 if (val == null || val < 0) return 'Enter a valid price';
+                return null;
+              },
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _taxRateController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'GST rate (%)',
+                hintText: 'Leave empty to use the default rate (e.g. 5)',
+              ),
+              validator: (v) {
+                final text = (v ?? '').trim();
+                if (text.isEmpty) return null;
+                final val = double.tryParse(text);
+                if (val == null || val < 0 || val > 40) return 'Enter a GST rate like 0, 5, 12 or 18';
                 return null;
               },
             ),

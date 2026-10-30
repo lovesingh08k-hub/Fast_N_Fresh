@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { startSession } = require('../tenancy/context');
 const {
   Order,
   User,
@@ -15,6 +16,7 @@ const {
 } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 const { parseClientDate } = require('../utils/dateRanges');
+const { computeBill, billFields, adjustFrom, financialYear } = require('../services/billing');
 
 function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -44,24 +46,18 @@ async function audit(req, action, order, details = {}) {
   }
 }
 
-// Shared pricing and validation logic used by direct bills and QR/open-order checkout.
-async function priceAndValidate({
-  items,
-  discount,
-  paymentMethod,
-  amountReceived,
-  customerId,
-  cashPortion,
-  upiPortion,
-  creditPortion,
-  session,
-}) {
+// Shared pricing and validation logic used by direct bills and QR/open-order
+// checkout. Prices always come from the menu (never the client); the bill
+// itself is calculated by services/billing.
+const PAYMENT_METHODS = ['CASH', 'UPI', 'CARD', 'ONLINE', 'CREDIT', 'MIXED', 'COMPLIMENTARY'];
+
+/**
+ * Validates cart lines against the menu and returns priced lines
+ * (name, price, taxRate from the product) ready for computeBill.
+ */
+async function priceLines(items, { session, checkStock = true } = {}) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new ApiError(400, 'Cart is empty. Add at least one item.');
-  }
-
-  if (!['CASH', 'UPI', 'CREDIT', 'MIXED'].includes(paymentMethod)) {
-    throw new ApiError(400, 'A valid payment method is required.');
   }
 
   const productIds = items
@@ -69,24 +65,18 @@ async function priceAndValidate({
     .map((i) => i.productId || i.product)
     .filter(Boolean);
 
-  const products = await Product.find({
-    _id: { $in: productIds },
-    isDeleted: false,
-  }).session(session);
+  const query = Product.find({ _id: { $in: productIds }, isDeleted: false });
+  if (session) query.session(session);
+  const products = await query;
+  const productMap = new Map(products.map((p) => [p._id.toString(), p]));
 
-  const productMap = new Map(
-    products.map((p) => [p._id.toString(), p])
-  );
-
-  const orderItems = [];
-  let subtotal = 0;
-
+  const lines = [];
   for (const line of items) {
     const quantity = Number(line.quantity);
+    const note = typeof line.note === 'string' && line.note.trim() ? line.note.trim().slice(0, 120) : undefined;
     const quick = line.quickItem;
-    const isQuickItem = quick && String(quick.name || '').trim();
 
-    if (isQuickItem) {
+    if (quick && String(quick.name || '').trim()) {
       const quickName = String(quick.name).trim();
       const quickPrice = Number(quick.price);
       if (!quickName || !Number.isFinite(quickPrice) || quickPrice < 0) {
@@ -95,186 +85,137 @@ async function priceAndValidate({
       if (!Number.isFinite(quantity) || quantity < 1) {
         throw new ApiError(400, `Invalid quantity for ${quickName}.`);
       }
-      const lineTotal = round2(quickPrice * quantity);
-      subtotal = round2(subtotal + lineTotal);
-      orderItems.push({
-        name: quickName,
-        price: quickPrice,
-        quantity,
-        total: lineTotal,
-        quickItem: { name: quickName, price: quickPrice },
-      });
+      lines.push({ name: quickName, price: quickPrice, quantity, note, quickItem: { name: quickName, price: quickPrice } });
       continue;
     }
 
-    const productId = line.productId || line.product;
-    const product = productMap.get(String(productId));
-
-    if (!product) {
-      throw new ApiError(400, 'Product not found or unavailable.');
+    const product = productMap.get(String(line.productId || line.product));
+    if (!product) throw new ApiError(400, 'Product not found or unavailable.');
+    if (product.status !== 'available') throw new ApiError(400, `${product.name} is currently unavailable.`);
+    if (!Number.isFinite(quantity) || quantity < 1) throw new ApiError(400, `Invalid quantity for ${product.name}.`);
+    if (checkStock && product.trackInventory && product.stock < quantity) {
+      throw new ApiError(400, `Insufficient stock for ${product.name}. Available: ${product.stock}.`);
     }
-
-    if (product.status !== 'available') {
-      throw new ApiError(
-        400,
-        `${product.name} is currently unavailable.`
-      );
-    }
-
-    if (!Number.isFinite(quantity) || quantity < 1) {
-      throw new ApiError(
-        400,
-        `Invalid quantity for ${product.name}.`
-      );
-    }
-
-    if (
-      product.trackInventory &&
-      product.stock < quantity
-    ) {
-      throw new ApiError(
-        400,
-        `Insufficient stock for ${product.name}. Available: ${product.stock}.`
-      );
-    }
-
-    const lineTotal = round2(
-      product.sellingPrice * quantity
-    );
-
-    subtotal = round2(subtotal + lineTotal);
-
-    orderItems.push({
+    lines.push({
       product: product._id,
       name: product.name,
       price: product.sellingPrice,
       quantity,
-      total: lineTotal,
+      taxRate: product.taxRate,
+      note,
+      ...(line.kotSentQuantity !== undefined ? { kotSentQuantity: line.kotSentQuantity } : {}),
     });
   }
+  return { lines, productMap };
+}
 
-  const safeDiscount = Math.max(
-    0,
-    Math.min(Number(discount) || 0, subtotal)
-  );
+async function priceAndValidate({
+  items,
+  orderType,
+  adjust = {},
+  paymentMethod,
+  amountReceived,
+  customerId,
+  cashPortion,
+  upiPortion,
+  cardPortion,
+  creditPortion,
+  onlinePlatform,
+  session,
+}) {
+  if (!PAYMENT_METHODS.includes(paymentMethod)) {
+    throw new ApiError(400, 'A valid payment method is required.');
+  }
 
-  // Tax is computed from live BusinessSettings (not trusted from the
-  // client) on the post-discount amount, mirroring how discount itself is
-  // applied before totalling.
+  const { lines, productMap } = await priceLines(items, { session });
   const settings = await BusinessSettings.getSettings(session);
-  const taxableAmount = round2(subtotal - safeDiscount);
-  const tax = settings.taxEnabled
-    ? round2((taxableAmount * settings.taxPercent) / 100)
-    : 0;
+  const bill = computeBill({
+    lines,
+    settings,
+    orderType,
+    adjust: { ...adjust, complimentary: paymentMethod === 'COMPLIMENTARY' || adjust.complimentary },
+  });
+  const { grandTotal } = bill;
 
-  const grandTotal = round2(
-    taxableAmount + tax
-  );
-
-  let paymentBreakdown = {
-    cash: 0,
-    upi: 0,
-    credit: 0,
-  };
-
-  if (paymentMethod === 'CASH') {
-    paymentBreakdown.cash = grandTotal;
-  }
-
-  if (paymentMethod === 'UPI') {
-    paymentBreakdown.upi = grandTotal;
-  }
-
-  if (paymentMethod === 'CREDIT') {
-    paymentBreakdown.credit = grandTotal;
-  }
-
-  if (paymentMethod === 'MIXED') {
-    paymentBreakdown = {
-      cash: round2(Number(cashPortion) || 0),
-      upi: round2(Number(upiPortion) || 0),
-      credit: round2(Number(creditPortion) || 0),
-    };
-
-    if (Object.values(paymentBreakdown).some((v) => !Number.isFinite(v) || v < 0)) {
-      throw new ApiError(400, 'Mixed payment portions must be zero or positive amounts.');
+  const paymentBreakdown = { cash: 0, upi: 0, card: 0, online: 0, credit: 0 };
+  switch (paymentMethod) {
+    case 'CASH': paymentBreakdown.cash = grandTotal; break;
+    case 'UPI': paymentBreakdown.upi = grandTotal; break;
+    case 'CARD': paymentBreakdown.card = grandTotal; break;
+    case 'ONLINE':
+      if (!String(onlinePlatform || '').trim()) {
+        throw new ApiError(400, 'Choose the delivery app (e.g. Swiggy / Zomato) for an online order.');
+      }
+      paymentBreakdown.online = grandTotal;
+      break;
+    case 'CREDIT': paymentBreakdown.credit = grandTotal; break;
+    case 'COMPLIMENTARY':
+      if (grandTotal !== 0) throw new ApiError(400, 'A complimentary bill must total zero.');
+      break;
+    case 'MIXED': {
+      Object.assign(paymentBreakdown, {
+        cash: round2(Number(cashPortion) || 0),
+        upi: round2(Number(upiPortion) || 0),
+        card: round2(Number(cardPortion) || 0),
+        credit: round2(Number(creditPortion) || 0),
+      });
+      if (Object.values(paymentBreakdown).some((v) => !Number.isFinite(v) || v < 0)) {
+        throw new ApiError(400, 'Mixed payment portions must be zero or positive amounts.');
+      }
+      const sum = round2(paymentBreakdown.cash + paymentBreakdown.upi + paymentBreakdown.card + paymentBreakdown.credit);
+      if (sum !== grandTotal) {
+        throw new ApiError(400, `Mixed payment split (Rs ${sum}) does not equal grand total (Rs ${grandTotal}).`);
+      }
+      break;
     }
-
-    const sum = round2(
-      paymentBreakdown.cash +
-        paymentBreakdown.upi +
-        paymentBreakdown.credit
-    );
-
-    if (sum !== grandTotal) {
-      throw new ApiError(
-        400,
-        `Mixed payment split (Rs ${sum}) does not equal grand total (Rs ${grandTotal}).`
-      );
-    }
+    default:
+      break;
   }
 
   let changeReturned = 0;
-
-  if (
-    paymentMethod === 'CASH' &&
-    amountReceived !== undefined &&
-    amountReceived !== null &&
-    amountReceived !== ''
-  ) {
+  if (paymentMethod === 'CASH' && amountReceived !== undefined && amountReceived !== null && amountReceived !== '') {
     const received = Number(amountReceived);
-
-    if (!Number.isFinite(received)) {
-      throw new ApiError(400, 'Amount received must be a valid number.');
-    }
-
-    if (received < grandTotal) {
-      throw new ApiError(
-        400,
-        'Amount received is less than the grand total.'
-      );
-    }
-
-    changeReturned = round2(
-      received - grandTotal
-    );
+    if (!Number.isFinite(received)) throw new ApiError(400, 'Amount received must be a valid number.');
+    if (received < grandTotal) throw new ApiError(400, 'Amount received is less than the grand total.');
+    changeReturned = round2(received - grandTotal);
   }
 
   let customer = null;
-
   if (customerId) {
-    customer = await Customer.findById(customerId).session(
-      session
-    );
-
-    if (!customer) {
-      throw new ApiError(
-        404,
-        'Selected customer not found.'
-      );
-    }
+    customer = await Customer.findById(customerId).session(session);
+    if (!customer) throw new ApiError(404, 'Selected customer not found.');
   }
-
-  if (
-    paymentBreakdown.credit > 0 &&
-    !customer
-  ) {
-    throw new ApiError(
-      400,
-      'A customer must be selected for the credit portion of this bill.'
-    );
+  if (paymentBreakdown.credit > 0 && !customer) {
+    throw new ApiError(400, 'A customer must be selected for the credit portion of this bill.');
   }
 
   return {
-    orderItems,
+    ...bill,
+    bill,
     productMap,
-    subtotal,
-    safeDiscount,
-    tax,
-    grandTotal,
+    safeDiscount: bill.discount,
     paymentBreakdown,
     changeReturned,
     customer,
+  };
+}
+
+/** Next invoice number of this outlet for the current financial year. */
+async function nextInvoiceNumber(session) {
+  const settings = await BusinessSettings.getSettings(session);
+  const fy = financialYear();
+  const seq = await Counter.getNextSequence(`invoice:${fy}`, session);
+  const prefix = String(settings.invoicePrefix || '').trim();
+  return `${prefix ? `${prefix}/` : ''}${fy}/${String(seq).padStart(4, '0')}`;
+}
+
+/** Payment details stored on the order, from the request body. */
+function paymentExtras(body) {
+  const clean = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 80) : undefined);
+  return {
+    onlinePlatform: body.paymentMethod === 'ONLINE' ? clean(body.onlinePlatform) : undefined,
+    onlineOrderRef: body.paymentMethod === 'ONLINE' ? clean(body.onlineOrderRef) : undefined,
+    cardReference: ['CARD', 'MIXED'].includes(body.paymentMethod) ? clean(body.cardReference) : undefined,
   };
 }
 
@@ -355,6 +296,7 @@ function appendKotFromUnsents(order, userId) {
         product: line.product,
         name: line.name,
         quantity: delta,
+        note: line.note,
       });
     }
   }
@@ -491,7 +433,7 @@ const createOrder = asyncHandler(async (req, res) => {
     );
   }
 
-  const session = await mongoose.startSession();
+  const session = await startSession();
 
   let savedOrder;
   let updatedCustomer = null;
@@ -500,16 +442,18 @@ const createOrder = asyncHandler(async (req, res) => {
     await session.withTransaction(async () => {
       const priced = await priceAndValidate({
         items,
-        discount,
+        orderType: orderType || 'takeaway',
+        adjust: adjustFrom(req.body),
         paymentMethod,
         amountReceived,
         customerId,
         cashPortion,
         upiPortion,
+        cardPortion: req.body.cardPortion,
         creditPortion,
+        onlinePlatform: req.body.onlinePlatform,
         session,
       });
-
 
       let table = null;
 
@@ -529,19 +473,20 @@ const createOrder = asyncHandler(async (req, res) => {
 
       const orderNumber =
         await Counter.getNextSequence(
-          'orderNumber'
+          'orderNumber',
+          session
         );
+      const invoiceNumber = await nextInvoiceNumber(session);
 
       const [order] = await Order.create(
         [
           {
             orderNumber,
+            invoiceNumber,
             clientRequestId: normalizedClientRequestId,
             items: priced.orderItems,
-            subtotal: priced.subtotal,
-            discount: priced.safeDiscount,
-            tax: priced.tax,
-            grandTotal: priced.grandTotal,
+            ...billFields(priced.bill),
+            ...paymentExtras(req.body),
             orderType:
               orderType || 'takeaway',
             orderSource: 'pos',
@@ -726,129 +671,31 @@ const updateOpenOrderItems =
       );
     }
 
-    const orderItems = [];
-    let subtotal = 0;
+    // Same calculation as checkout (services/billing), so the running
+    // total on an open tab matches what the final bill will charge.
+    const { lines } = items.length > 0
+      ? await priceLines(items, { checkStock: false })
+      : { lines: [] };
+    preserveKotSentQuantities(order.items, lines);
 
-    if (items.length > 0) {
-      const productIds = items
-        .filter((i) => !(i.quickItem && String(i.quickItem.name || '').trim()))
-        .map((i) => i.productId || i.product)
-        .filter(Boolean);
-
-      const products =
-        await Product.find({
-          _id: { $in: productIds },
-          isDeleted: false,
-        });
-
-      const productMap = new Map(
-        products.map((p) => [
-          p._id.toString(),
-          p,
-        ])
-      );
-
-      for (const line of items) {
-        const quick = line.quickItem;
-        const isQuickItem = quick && String(quick.name || '').trim();
-        const quantity = Number(line.quantity);
-
-        if (isQuickItem) {
-          const quickName = String(quick.name).trim();
-          const quickPrice = Number(quick.price);
-          if (!quickName || !Number.isFinite(quickPrice) || quickPrice < 0 || !Number.isFinite(quantity) || quantity < 1) {
-            throw new ApiError(400, 'Invalid Quick Item.');
-          }
-          const lineTotal = round2(quickPrice * quantity);
-          subtotal = round2(subtotal + lineTotal);
-          orderItems.push({
-            name: quickName,
-            price: quickPrice,
-            quantity,
-            total: lineTotal,
-            quickItem: { name: quickName, price: quickPrice },
-          });
-          continue;
-        }
-
-        const product =
-          productMap.get(
-            String(
-              line.productId ||
-                line.product
-            )
-          );
-
-        if (!product) {
-          throw new ApiError(
-            400,
-            'Product not found or unavailable.'
-          );
-        }
-
-        if (
-          product.status !==
-          'available'
-        ) {
-          throw new ApiError(
-            400,
-            `${product.name} is currently unavailable.`
-          );
-        }
-
-        if (
-          !Number.isFinite(quantity) ||
-          quantity < 1
-        ) {
-          throw new ApiError(
-            400,
-            `Invalid quantity for ${product.name}.`
-          );
-        }
-
-        const lineTotal = round2(
-          product.sellingPrice *
-            quantity
-        );
-
-        subtotal = round2(
-          subtotal + lineTotal
-        );
-
-        orderItems.push({
-          product: product._id,
-          name: product.name,
-          price: product.sellingPrice,
-          quantity,
-          total: lineTotal,
-        });
-      }
+    // Remember the cashier's choices on the tab; checkout reuses them.
+    const b = req.body;
+    if (b.discountType !== undefined) order.discountType = b.discountType === 'percent' ? 'percent' : 'flat';
+    if (b.discountValue !== undefined) order.discountValue = Math.max(0, Number(b.discountValue) || 0);
+    else if (b.discount !== undefined && b.discountType === undefined) {
+      order.discountType = 'flat';
+      order.discountValue = Math.max(0, Number(b.discount) || 0);
     }
+    if (b.discountReason !== undefined) order.discountReason = String(b.discountReason || '').trim() || undefined;
+    if (b.serviceCharge !== undefined) order.serviceChargeEnabled = b.serviceCharge === null ? undefined : Boolean(b.serviceCharge);
+    if (b.packagingCharge !== undefined) order.packagingChargeOverride = b.packagingCharge === null ? undefined : Number(b.packagingCharge);
+    if (b.deliveryCharge !== undefined) order.deliveryChargeOverride = b.deliveryCharge === null ? undefined : Number(b.deliveryCharge);
 
-    const safeDiscount =
-      Math.max(
-        0,
-        Math.min(
-          Number(discount) || 0,
-          subtotal
-        )
-      );
-
-    preserveKotSentQuantities(order.items, orderItems);
-
-    // Same tax rule as checkout (priceAndValidate), so the running total on
-    // an open tab matches what the final bill will charge.
     const settings = await BusinessSettings.getSettings();
-    const taxableAmount = round2(subtotal - safeDiscount);
-    const tax = settings.taxEnabled
-      ? round2((taxableAmount * settings.taxPercent) / 100)
-      : 0;
+    const bill = computeBill({ lines, settings, orderType: order.orderType, adjust: adjustFrom({}, order) });
 
-    order.items = orderItems;
-    order.subtotal = subtotal;
-    order.discount = safeDiscount;
-    order.tax = tax;
-    order.grandTotal = round2(taxableAmount + tax);
+    order.items = bill.orderItems;
+    Object.assign(order, billFields(bill));
 
     if (notes !== undefined) {
       order.notes = notes;
@@ -901,7 +748,7 @@ const startOpenOrder = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Delivery details are only valid for delivery orders.');
   }
 
-  const session = await mongoose.startSession();
+  const session = await startSession();
   let created;
   try {
     await session.withTransaction(async () => {
@@ -999,7 +846,7 @@ const checkoutOrder =
     }
 
     const session =
-      await mongoose.startSession();
+      await startSession();
 
     let finalized;
     let updatedCustomer = null;
@@ -1047,39 +894,33 @@ const checkoutOrder =
                   (i) => ({
                     productId: i.product,
                     quantity: i.quantity,
+                    note: i.note,
+                    kotSentQuantity: i.kotSentQuantity,
                     ...(i.quickItem
                       ? { quickItem: i.quickItem }
                       : {}),
                   })
                 ),
-              discount:
-                discount !== undefined
-                  ? discount
-                  : order.discount,
+              orderType: order.orderType,
+              // Choices made on the tab, overridden by what the payment
+              // screen sends now.
+              adjust: adjustFrom(req.body, order),
               paymentMethod,
               amountReceived,
               customerId:
                 effectiveCustomerId,
               cashPortion,
               upiPortion,
+              cardPortion: req.body.cardPortion,
               creditPortion,
+              onlinePlatform: req.body.onlinePlatform,
               session,
             });
 
           order.items =
             priced.orderItems;
-
-          order.subtotal =
-            priced.subtotal;
-
-          order.discount =
-            priced.safeDiscount;
-
-          order.tax =
-            priced.tax;
-
-          order.grandTotal =
-            priced.grandTotal;
+          Object.assign(order, billFields(priced.bill), paymentExtras(req.body));
+          if (!order.invoiceNumber) order.invoiceNumber = await nextInvoiceNumber(session);
 
           order.paymentMethod =
             paymentMethod;
@@ -1779,7 +1620,7 @@ const voidOrder =
       req.body;
 
     const session =
-      await mongoose.startSession();
+      await startSession();
 
     let voided;
 
@@ -1929,8 +1770,154 @@ const voidOrder =
     });
   });
 
+// POST /api/orders/quote
+// Bill preview for the cart / payment screen: same calculation as the final
+// bill (GST per rate, charges, round-off), nothing is saved.
+const quoteOrder = asyncHandler(async (req, res) => {
+  const { items = [], orderType = 'takeaway' } = req.body;
+  const settings = await BusinessSettings.getSettings();
+  const { lines } = Array.isArray(items) && items.length > 0
+    ? await priceLines(items, { checkStock: false })
+    : { lines: [] };
+  const bill = computeBill({
+    lines,
+    settings,
+    orderType,
+    adjust: { ...adjustFrom(req.body), complimentary: req.body.paymentMethod === 'COMPLIMENTARY' || req.body.complimentary },
+  });
+  res.json({ success: true, data: bill });
+});
+
+async function loadOpenOrder(id, session) {
+  const order = await Order.findById(id).session(session);
+  if (!order) throw new ApiError(404, 'Order not found.');
+  if (order.status !== 'open') throw new ApiError(409, 'Only an unbilled (open) order can be changed.');
+  return order;
+}
+
+/** Re-prices an open order's current items (after split/merge). */
+async function repriceOpenOrder(order, session) {
+  const settings = await BusinessSettings.getSettings(session);
+  const lines = order.items.map((i) => (i.toObject ? i.toObject() : i));
+  const bill = computeBill({ lines, settings, orderType: order.orderType, adjust: adjustFrom({}, order) });
+  order.items = bill.orderItems;
+  Object.assign(order, billFields(bill));
+}
+
+// POST /api/orders/:id/split  { lines: [{ index, quantity }], label? }
+// Moves some items of an open order into a new open order on the same
+// table/counter, so one group can pay separately.
+const splitOpenOrder = asyncHandler(async (req, res) => {
+  await assertBusinessDayOpen();
+  const moves = Array.isArray(req.body.lines) ? req.body.lines : [];
+  if (moves.length === 0) throw new ApiError(400, 'Choose at least one item to move.');
+
+  const session = await startSession();
+  let created;
+  let source;
+  try {
+    await session.withTransaction(async () => {
+      source = await loadOpenOrder(req.params.id, session);
+      const moved = [];
+      for (const move of moves) {
+        const line = source.items[Number(move.index)];
+        const quantity = Number(move.quantity);
+        if (!line || !Number.isInteger(quantity) || quantity < 1 || quantity > line.quantity) {
+          throw new ApiError(400, 'Invalid item or quantity to move.');
+        }
+        // Kitchen-sent quantity moves with the items.
+        const sentMoved = Math.min(Number(line.kotSentQuantity || 0), quantity);
+        const copy = line.toObject();
+        moved.push({ ...copy, quantity, total: round2(copy.price * quantity), kotSentQuantity: sentMoved });
+        line.quantity -= quantity;
+        line.kotSentQuantity = Number(line.kotSentQuantity || 0) - sentMoved;
+      }
+      source.items = source.items.filter((l) => l.quantity > 0);
+      if (source.items.length === 0) throw new ApiError(400, 'Leave at least one item on the original bill.');
+      await repriceOpenOrder(source, session);
+      await source.save({ session });
+
+      const orderNumber = await Counter.getNextSequence('orderNumber', session);
+      const label = String(req.body.label || '').trim() || `${source.tableCustomerLabel || 'Customer'} (split)`;
+      const [order] = await Order.create([{
+        orderNumber,
+        items: moved,
+        orderType: source.orderType,
+        orderSource: 'pos',
+        table: source.table,
+        tableCustomerLabel: label.slice(0, 60),
+        deliveryInfo: source.deliveryInfo,
+        subtotal: 0,
+        grandTotal: 0,
+        paymentStatus: 'pending',
+        kitchenStatus: source.kitchenStatus,
+        status: 'open',
+        staff: req.user._id,
+      }], { session });
+      await repriceOpenOrder(order, session);
+      await order.save({ session });
+      created = order;
+    });
+  } finally {
+    await session.endSession();
+  }
+  await audit(req, 'ORDER_SPLIT', source, { into: created.orderNumber });
+  res.status(201).json({ success: true, data: { order: source, newOrder: created } });
+});
+
+// POST /api/orders/:id/merge  { fromOrderId }
+// Moves every item of another open order into this one and closes the other
+// (e.g. two tables joined into one bill).
+const mergeOpenOrders = asyncHandler(async (req, res) => {
+  await assertBusinessDayOpen();
+  if (!req.body.fromOrderId || String(req.body.fromOrderId) === String(req.params.id)) {
+    throw new ApiError(400, 'Choose another open order to merge.');
+  }
+  const session = await startSession();
+  let target;
+  let from;
+  try {
+    await session.withTransaction(async () => {
+      target = await loadOpenOrder(req.params.id, session);
+      from = await loadOpenOrder(req.body.fromOrderId, session);
+      for (const line of from.items) {
+        const key = orderLineKey(line);
+        const same = target.items.find((l) => orderLineKey(l) === key && (l.note || '') === (line.note || ''));
+        if (same) {
+          same.quantity += line.quantity;
+          same.kotSentQuantity = Number(same.kotSentQuantity || 0) + Number(line.kotSentQuantity || 0);
+        } else {
+          target.items.push(line.toObject());
+        }
+      }
+      target.kots.push(...from.kots.map((k) => k.toObject()));
+      await repriceOpenOrder(target, session);
+      await target.save({ session });
+
+      from.items = [];
+      from.status = 'voided';
+      from.voidedAt = new Date();
+      from.voidedBy = req.user._id;
+      from.voidReason = `Merged into bill #${target.orderNumber}`;
+      await from.save({ session });
+    });
+  } finally {
+    await session.endSession();
+  }
+  // A table left without open orders becomes available again.
+  if (from.table && String(from.table) !== String(target.table || '')) {
+    const stillOpen = await Order.exists({ table: from.table, status: { $in: ['open', 'preparing', 'ready'] } });
+    if (!stillOpen) await Table.updateOne({ _id: from.table, status: 'occupied' }, { status: 'available' });
+  }
+  await audit(req, 'ORDER_MERGED', target, { from: from.orderNumber });
+  res.json({ success: true, data: { order: target } });
+});
+
 module.exports = {
   createOrder,
+  quoteOrder,
+  splitOpenOrder,
+  mergeOpenOrders,
   createKot,
   updateKitchenStatus,
   startTableOrder,

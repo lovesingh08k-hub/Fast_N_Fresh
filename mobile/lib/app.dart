@@ -6,6 +6,7 @@ import 'core/widgets/connectivity_banner.dart';
 import 'core/widgets/latest_snackbar_messenger.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
+import 'screens/auth/licence_blocked_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/main/main_shell.dart';
 import 'core/theme/app_colors.dart';
@@ -130,7 +131,11 @@ class _RootRouterState extends State<_RootRouter> {
 
     switch (auth.status) {
       case AuthStatus.authenticated:
-        return const MainShell();
+        // A new key per user/outlet rebuilds every tab from scratch, so no
+        // screen keeps showing the previous outlet's data.
+        return MainShell(key: ValueKey(auth.sessionKey));
+      case AuthStatus.licenceInactive:
+        return const LicenceBlockedScreen();
       case AuthStatus.unauthenticated:
         return const LoginScreen();
       case AuthStatus.unknown:

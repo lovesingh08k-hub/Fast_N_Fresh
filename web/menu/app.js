@@ -261,7 +261,7 @@
 
     try {
       response = await fetch(
-        API_BASE_URL + path,
+        API_BASE_URL + withOutlet(path),
         {
           headers: {
             'Content-Type': 'application/json',

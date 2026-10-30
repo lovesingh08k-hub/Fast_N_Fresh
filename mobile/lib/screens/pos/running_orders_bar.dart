@@ -31,6 +31,7 @@ Future<Order> saveCartAsOpenOrder(CartProvider cart) async {
       notes: cart.notes,
       customerId: cart.selectedCustomer?.id,
       tableCustomerLabel: cart.openOrderLabelUpdate,
+      extra: cart.billAdjustments,
     );
     return service.getById(cart.openOrderId!);
   }
@@ -54,6 +55,7 @@ Future<Order> saveCartAsOpenOrder(CartProvider cart) async {
     discount: cart.discount,
     notes: cart.notes,
     customerId: cart.selectedCustomer?.id,
+    extra: cart.billAdjustments,
   );
   cart.configureContext(
     orderType: cart.orderType,
@@ -137,8 +139,10 @@ Future<Order> loadOpenOrderIntoCart(CartProvider cart, String orderId) async {
               categoryId: '',
               sellingPrice: oi.price,
               imageUrl: oi.imageUrl,
+              taxRate: oi.taxRate,
             ),
             quantity: oi.quantity,
+            note: oi.note ?? '',
           ),
         )
         .toList(),
@@ -156,6 +160,7 @@ Future<Order> loadOpenOrderIntoCart(CartProvider cart, String orderId) async {
     cart.deliveryPhone = latest.deliveryInfo?.phone ?? '';
   }
   cart.notes = latest.notes ?? '';
+  cart.restoreAdjustments(latest.bill, serviceCharge: latest.serviceChargeEnabled, deliveryCharge: latest.deliveryChargeOverride);
   return latest;
 }
 

@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
+const { startSession } = require('../tenancy/context');
 const { PaymentTransaction, Order, Counter, Product, InventoryTransaction } = require('../models');
 
 async function finalizeVerifiedPayment(transactionId, providerData = {}) {
-  const session = await mongoose.startSession();
+  const session = await startSession();
   let finalOrder = null;
 
   try {

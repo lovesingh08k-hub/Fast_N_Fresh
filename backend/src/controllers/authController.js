@@ -1,15 +1,53 @@
-const { User } = require('../models');
+const { User, modelOn } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 const { signToken } = require('../utils/jwt');
+const {
+  tenantByCode,
+  defaultTenant,
+  assertLicence,
+  outletsForUser,
+  coreDbFor,
+  outletKey,
+} = require('../tenancy/resolver');
+
+/** Client (business) and outlet details the app needs after login. */
+function sessionInfo(tenant, user, currentOutlet) {
+  if (!tenant) return { business: null, outlets: [], currentOutlet: null };
+  const outlets = outletsForUser(tenant, user).map((o) => ({
+    id: String(o._id),
+    code: o.code,
+    name: o.name,
+    key: `${tenant.code}:${o.code}`,
+  }));
+  return {
+    business: {
+      code: tenant.code,
+      name: tenant.name,
+      validUntil: tenant.validUntil,
+      maxOutlets: tenant.maxOutlets,
+    },
+    outlets,
+    currentOutlet: currentOutlet ? outlets.find((o) => o.code === currentOutlet.code) || null : outlets[0] || null,
+  };
+}
 
 // POST /api/auth/login
-// Accepts either username or phone in `identifier`.
+// Accepts either username or phone in `identifier`, plus the business code
+// of the client (cafe/restaurant). Without a business code (older app
+// versions) the default client is used.
 const login = asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
+  const businessCode = typeof req.body.businessCode === 'string' ? req.body.businessCode.trim() : '';
 
   if (!identifier || !password || typeof identifier !== 'string' || typeof password !== 'string') {
     throw new ApiError(400, 'Username/phone and password are required.');
   }
+
+  const tenant = businessCode ? await tenantByCode(businessCode) : await defaultTenant();
+  if (businessCode && !tenant) {
+    throw new ApiError(401, 'Invalid business code, username or password.');
+  }
+  const UserModel = tenant ? modelOn(coreDbFor(tenant), 'User') : User;
 
   const query = {
     $or: [
@@ -18,7 +56,7 @@ const login = asyncHandler(async (req, res) => {
     ],
   };
 
-  const user = await User.findOne(query).select('+passwordHash');
+  const user = await UserModel.findOne(query).select('+passwordHash');
 
   if (!user) {
     throw new ApiError(401, 'Invalid credentials.');
@@ -38,11 +76,19 @@ const login = asyncHandler(async (req, res) => {
       'Your account has been deactivated. Contact the admin.',
     );
   }
+  if (tenant) assertLicence(tenant);
+
+  const session = sessionInfo(tenant, user);
+  if (tenant && !session.currentOutlet) {
+    throw new ApiError(402, 'No active outlet is available for this account. Please contact your POS provider.', {
+      code: 'LICENCE_INACTIVE',
+    });
+  }
 
   user.lastLoginAt = new Date();
   await user.save();
 
-  const token = signToken(user);
+  const token = signToken(user, tenant);
 
   res.json({
     success: true,
@@ -50,15 +96,22 @@ const login = asyncHandler(async (req, res) => {
     data: {
       token,
       user: user.toSafeJSON(),
+      ...session,
     },
   });
 });
 
 // GET /api/auth/me
+// The user, plus (for platform clients) the business, the outlets this user
+// may open, and the outlet this request ran in.
 const getMe = asyncHandler(async (req, res) => {
+  const ctx = req.tenantContext;
   res.json({
     success: true,
-    data: req.user.toSafeJSON(),
+    data: {
+      ...req.user.toSafeJSON(),
+      ...(ctx ? { session: { ...sessionInfo(ctx.tenant, req.user, ctx.outlet), outletKey: outletKey(ctx) } } : {}),
+    },
   });
 });
 

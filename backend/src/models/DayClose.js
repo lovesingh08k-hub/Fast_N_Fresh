@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const userRef = require('./userRef');
 const schema = new mongoose.Schema({
   businessDate: { type: String, required: true, unique: true, index: true },
   openingCash: { type: Number, required: true, min: 0, default: 0 },
@@ -10,8 +11,8 @@ const schema = new mongoose.Schema({
   actualCash: { type: Number },
   difference: { type: Number },
   status: { type: String, enum: ['open','closed'], default: 'open' },
-  openedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  closedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  openedBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef },
+  closedBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef },
   closedAt: { type: Date },
   note: { type: String, trim: true },
 }, { timestamps: true });

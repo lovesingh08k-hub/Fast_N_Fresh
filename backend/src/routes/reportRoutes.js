@@ -5,6 +5,8 @@ const {
   getStaffReport,
   getCreditReport,
   getExpenseReport,
+  getTaxReport,
+  getDayEndReport,
 } = require('../controllers/reportController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -18,6 +20,8 @@ router.get('/sales', authorize('admin', 'manager'), getSalesReport);
 router.get('/products', authorize('admin', 'manager'), getProductReport);
 router.get('/staff', authorize('admin', 'manager'), getStaffReport);
 router.get('/expenses', authorize('admin', 'manager'), getExpenseReport);
+router.get('/tax', authorize('admin', 'manager'), getTaxReport); // GST summary per rate
+router.get('/day-end', authorize('admin', 'manager'), getDayEndReport); // Z report
 
 // Credit/UDHAR report: manager can also view outstanding balances/history,
 // per the updated permission matrix — staff still cannot.

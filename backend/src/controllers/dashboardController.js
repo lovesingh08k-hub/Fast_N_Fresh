@@ -11,12 +11,16 @@ function summarize(orders) {
   const cash = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.cash || 0), 0);
   const upi = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.upi || 0), 0);
   const credit = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.credit || 0), 0);
+  const card = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.card || 0), 0);
+  const online = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.online || 0), 0);
   return {
     sales: round2(sales),
     orders: orders.length,
     cash: round2(cash),
     upi: round2(upi),
     credit: round2(credit),
+    card: round2(card),
+    online: round2(online),
   };
 }
 
@@ -97,6 +101,11 @@ const getDashboard = asyncHandler(async (req, res) => {
     data: {
       today,
       lowStockCount,
+      // Unbilled orders right now (tables, counters, QR): count and value.
+      running: await Order.aggregate([
+        { $match: { status: { $in: ['open', 'preparing', 'ready'] }, paymentStatus: { $ne: 'paid' } } },
+        { $group: { _id: null, count: { $sum: 1 }, value: { $sum: '$grandTotal' }, ready: { $sum: { $cond: [{ $eq: ['$status', 'ready'] }, 1, 0] } } } },
+      ]).then((r) => ({ count: r[0]?.count || 0, value: Math.round((r[0]?.value || 0) * 100) / 100, ready: r[0]?.ready || 0 })),
       outstandingCredit: { total: round2(outstanding.total), customerCount: outstanding.count },
       cancelledToday,
       pendingPaymentsToday,

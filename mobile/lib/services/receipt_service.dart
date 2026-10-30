@@ -60,7 +60,8 @@ class ReceiptService {
           for (final line in address) {
             widgets.add(_center(line, smallSize));
           }
-          if (gst.isNotEmpty) widgets.add(_center('GST: $gst', smallSize));
+          if (gst.isNotEmpty) widgets.add(_center('GSTIN: $gst', smallSize));
+          if (settings.fssai.trim().isNotEmpty) widgets.add(_center('FSSAI: ${settings.fssai.trim()}', smallSize));
 
           widgets.add(_gap(3));
           widgets.add(_line(_dash(chars), fontSize));
@@ -71,6 +72,9 @@ class ReceiptService {
             chars,
             fontSize,
           ));
+          if (order.invoiceNumber != null) {
+            widgets.add(_line('Invoice: ${_fit(order.invoiceNumber!, chars - 9)}', fontSize));
+          }
           if (order.printCustomerName != null) {
             widgets.add(_line('Customer: ${_fit(order.printCustomerName!, chars)}', fontSize));
           }
@@ -86,15 +90,12 @@ class ReceiptService {
 
           widgets.add(_line(_dash(chars), fontSize));
           widgets.add(_summaryLine('Sub Total', _money(order.subtotal), chars, fontSize));
-          widgets.add(_summaryLine('Discount', _money(order.discount), chars, fontSize));
-          widgets.add(_summaryLine('Net Total', _money(order.subtotal - order.discount), chars, fontSize));
-          if (totalTax > 0) {
-            widgets.add(_summaryLine('CGST @${_rate(halfRate)}%', _money(halfTax), chars, fontSize));
-            widgets.add(_summaryLine('SGST @${_rate(halfRate)}%', _money(halfTax), chars, fontSize));
+          for (final row in _billLines(order, halfRate, halfTax)) {
+            widgets.add(_summaryLine(row.$1, row.$2, chars, fontSize));
           }
           widgets.add(_line(_dash(chars), fontSize));
           widgets.add(_summaryLine('TOTAL', _money(order.grandTotal), chars, fontSize, bold: true, large: true));
-          widgets.add(_summaryLine('Payment mode', order.paymentMethod, chars, fontSize));
+          widgets.add(_summaryLine('Payment mode', paymentLabel(order), chars, fontSize));
                     widgets.add(_line(_dash(chars), fontSize));
           widgets.add(_center('Thank you!', fontSize + .5, bold: true));
           if (settings.receiptFooter.trim().isNotEmpty) {
@@ -312,9 +313,9 @@ class ReceiptService {
       ..writeln('The food which makes you happy')
       ..writeln('Phone: ${settings.phone}')
       ..writeln('Address: ${settings.address}')
-      ..writeln('GST: ${settings.gstNumber}')
+      ..writeln('GSTIN: ${settings.gstNumber}')
       ..writeln('Order from: ${order.tableName?.trim().isNotEmpty == true ? order.tableName : order.orderType}')
-      ..writeln('Bill #${order.orderNumber}')
+      ..writeln('Bill #${order.orderNumber}${order.invoiceNumber != null ? '  Invoice: ${order.invoiceNumber}' : ''}')
       ..writeln('Date: ${Formatters.shortDate(order.createdAt)}')
       ..writeln('Time: ${Formatters.time(order.createdAt)}')
       ..writeln('---');
@@ -327,12 +328,14 @@ class ReceiptService {
 
     buffer
       ..writeln('---')
-      ..writeln('Sub Total : ${_money(order.subtotal)}')
-      ..writeln('Discount  : ${_money(order.discount)}')
-      ..writeln('CGST      : ${_money(order.tax / 2)}')
-      ..writeln('SGST      : ${_money(order.tax / 2)}')
+      ..writeln('Sub Total : ${_money(order.subtotal)}');
+    final halfRate = (settings.taxEnabled ? settings.taxPercent : 0) / 2;
+    for (final row in _billLines(order, halfRate, order.tax / 2)) {
+      buffer.writeln('${row.$1}: ${row.$2}');
+    }
+    buffer
       ..writeln('TOTAL     : ${_money(order.grandTotal)}')
-      ..writeln('Payment mode: ${order.paymentMethod}')
+      ..writeln('Payment mode: ${paymentLabel(order)}')
       ..writeln(settings.receiptFooter)
       ..writeln('Powered by PWP');
 
@@ -391,7 +394,10 @@ class ReceiptService {
       bytes += generator.text(line, styles: const PosStyles(align: PosAlign.center));
     }
     if (settings.gstNumber.trim().isNotEmpty) {
-      bytes += generator.text('GST: ${settings.gstNumber.trim()}', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('GSTIN: ${settings.gstNumber.trim()}', styles: const PosStyles(align: PosAlign.center));
+    }
+    if (settings.fssai.trim().isNotEmpty) {
+      bytes += generator.text('FSSAI: ${settings.fssai.trim()}', styles: const PosStyles(align: PosAlign.center));
     }
 
     bytes += generator.hr();
@@ -402,6 +408,9 @@ class ReceiptService {
       'Bill #${order.orderNumber}',
       chars,
     ));
+    if (order.invoiceNumber != null) {
+      bytes += generator.text('Invoice: ${_fit(order.invoiceNumber!, chars - 9)}');
+    }
     if (order.printCustomerName != null) {
       bytes += generator.text('Customer: ${_fit(order.printCustomerName!, chars)}');
     }
@@ -421,20 +430,16 @@ class ReceiptService {
 
     bytes += generator.hr();
     bytes += generator.text(_summaryLineText('Sub Total', _money(order.subtotal), chars));
-    bytes += generator.text(_summaryLineText('Discount', _money(order.discount), chars));
-    bytes += generator.text(_summaryLineText('Net Total', _money(order.subtotal - order.discount), chars));
-    if (order.tax > 0) {
-      final halfTax = order.tax / 2;
-      final halfRate = (settings.taxEnabled ? settings.taxPercent : 0) / 2;
-      bytes += generator.text(_summaryLineText('CGST @${_rate(halfRate)}%', _money(halfTax), chars));
-      bytes += generator.text(_summaryLineText('SGST @${_rate(halfRate)}%', _money(halfTax), chars));
+    final halfRate = (settings.taxEnabled ? settings.taxPercent : 0) / 2;
+    for (final row in _billLines(order, halfRate, order.tax / 2)) {
+      bytes += generator.text(_summaryLineText(row.$1, row.$2, chars));
     }
     bytes += generator.hr();
     bytes += generator.text(
       _summaryLineText('TOTAL', _money(order.grandTotal), chars),
       styles: const PosStyles(bold: true),
     );
-    bytes += generator.text(_summaryLineText('Payment mode', order.paymentMethod, chars));
+    bytes += generator.text(_summaryLineText('Payment mode', paymentLabel(order), chars));
     bytes += generator.hr();
     bytes += generator.text('Thank you!', styles: const PosStyles(align: PosAlign.center, bold: true));
     for (final line in _wrap(settings.receiptFooter, chars)) {
@@ -461,6 +466,48 @@ class ReceiptService {
     }
     final bytes = await buildThermalTicketBytes(order, settings, widthMm: widthMm);
     return BluetoothPrinterService().printBytes(bytes);
+  }
+
+  /// Rows between Sub Total and TOTAL: discount, charges, CGST/SGST (or
+  /// IGST) per rate and round-off. Bills from before per-rate GST only have
+  /// a total tax, printed as half CGST / half SGST at the outlet rate.
+  List<(String, String)> _billLines(Order order, num legacyHalfRate, double legacyHalfTax) {
+    final halfRate = legacyHalfRate.toDouble();
+    final bill = order.bill;
+    final rows = <(String, String)>[];
+    if (bill.taxes.isEmpty && order.tax > 0) {
+      if (order.discount > 0) rows.add(('Discount', '-${_money(order.discount)}'));
+      rows.add(('CGST @${_rate(halfRate)}%', _money(legacyHalfTax)));
+      rows.add(('SGST @${_rate(halfRate)}%', _money(legacyHalfTax)));
+      return rows;
+    }
+    for (final row in bill.rows()) {
+      rows.add((row.$1, row.$2 < 0 ? '-${_money(-row.$2)}' : _money(row.$2)));
+    }
+    return rows;
+  }
+
+  /// "Card", "Online (Swiggy)", "Complimentary", "Mixed (Cash 100, Card 121)".
+  static String paymentLabel(Order order) {
+    final b = order.paymentBreakdown;
+    switch (order.paymentMethod) {
+      case 'ONLINE':
+        return order.onlinePlatform == null ? 'Online' : 'Online (${order.onlinePlatform})';
+      case 'COMPLIMENTARY':
+        return 'Complimentary';
+      case 'CARD':
+        return 'Card';
+      case 'MIXED':
+        final parts = [
+          if (b.cash > 0) 'Cash ${b.cash.toStringAsFixed(0)}',
+          if (b.upi > 0) 'UPI ${b.upi.toStringAsFixed(0)}',
+          if (b.card > 0) 'Card ${b.card.toStringAsFixed(0)}',
+          if (b.credit > 0) 'Credit ${b.credit.toStringAsFixed(0)}',
+        ];
+        return parts.isEmpty ? 'Mixed' : 'Mixed (${parts.join(', ')})';
+      default:
+        return order.paymentMethod;
+    }
   }
 
   String _twoColumnText(String left, String right, int chars) {

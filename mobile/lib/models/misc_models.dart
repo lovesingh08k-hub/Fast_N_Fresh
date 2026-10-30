@@ -46,6 +46,19 @@ class BusinessSettings {
   final String currencySymbol;
   final String primaryColor;
 
+  // Billing (see backend services/billing.js).
+  final bool taxInclusive; // menu prices already include GST
+  final String gstType; // cgst_sgst | igst
+  final String fssai;
+  final String invoicePrefix;
+  final bool roundOff;
+  final double serviceChargePercent;
+  final List<String> serviceChargeOn; // order types
+  final double packagingCharge;
+  final List<String> packagingChargeOn;
+  final double deliveryCharge;
+  final List<String> onlinePlatforms; // Swiggy, Zomato...
+
   BusinessSettings({
     this.cafeName = 'PWP POS • PERSONALIZE WEB PAGE',
     this.tagline = 'Fresh • Fast • Delicious',
@@ -60,7 +73,21 @@ class BusinessSettings {
     this.defaultDiscount = 0,
     this.currencySymbol = '₹',
     this.primaryColor = '#0E7C5A',
+    this.taxInclusive = false,
+    this.gstType = 'cgst_sgst',
+    this.fssai = '',
+    this.invoicePrefix = 'INV',
+    this.roundOff = true,
+    this.serviceChargePercent = 0,
+    this.serviceChargeOn = const ['dine_in'],
+    this.packagingCharge = 0,
+    this.packagingChargeOn = const ['takeaway', 'delivery'],
+    this.deliveryCharge = 0,
+    this.onlinePlatforms = const ['Swiggy', 'Zomato'],
   });
+
+  static List<String> _strings(Object? v, List<String> fallback) =>
+      v is List ? v.map((e) => e.toString()).toList() : fallback;
 
   factory BusinessSettings.fromJson(Map<String, dynamic> json) {
     return BusinessSettings(
@@ -77,6 +104,17 @@ class BusinessSettings {
       defaultDiscount: (json['defaultDiscount'] as num?)?.toDouble() ?? 0,
       currencySymbol: json['currencySymbol'] as String? ?? '₹',
       primaryColor: json['primaryColor'] as String? ?? '#0E7C5A',
+      taxInclusive: json['taxInclusive'] == true,
+      gstType: json['gstType'] as String? ?? 'cgst_sgst',
+      fssai: json['fssai'] as String? ?? '',
+      invoicePrefix: json['invoicePrefix'] as String? ?? 'INV',
+      roundOff: json['roundOff'] as bool? ?? true,
+      serviceChargePercent: (json['serviceChargePercent'] as num?)?.toDouble() ?? 0,
+      serviceChargeOn: _strings(json['serviceChargeOn'], const ['dine_in']),
+      packagingCharge: (json['packagingCharge'] as num?)?.toDouble() ?? 0,
+      packagingChargeOn: _strings(json['packagingChargeOn'], const ['takeaway', 'delivery']),
+      deliveryCharge: (json['deliveryCharge'] as num?)?.toDouble() ?? 0,
+      onlinePlatforms: _strings(json['onlinePlatforms'], const ['Swiggy', 'Zomato']),
     );
   }
 }

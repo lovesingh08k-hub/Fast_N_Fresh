@@ -83,7 +83,7 @@ class _CartSheetState extends State<CartSheet> {
           decoration: BoxDecoration(
             color: AppColors.background,
             borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(20),
+              top: Radius.circular(26),
             ),
           ),
           child: Consumer<CartProvider>(
@@ -390,19 +390,82 @@ class _CartSheetState extends State<CartSheet> {
     BuildContext context,
     CartProvider cart,
   ) {
-    return TextField(
-      keyboardType: const TextInputType.numberWithOptions(
-        decimal: true,
-      ),
-      decoration: const InputDecoration(
-        labelText: 'Discount (₹)',
-        prefixIcon: Icon(Icons.percent),
-      ),
-      onChanged: (value) {
-        cart.setDiscount(
-          double.tryParse(value) ?? 0,
-        );
-      },
+    final percent = cart.discountType == 'percent';
+    final quote = cart.quoteIsCurrent ? cart.quote : null;
+    final hasDiscount = percent ? cart.discountPercent > 0 : cart.discount > 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                // Rebuild the field when switching ₹ / % so it shows that value.
+                key: ValueKey('discount-${cart.discountType}'),
+                initialValue: hasDiscount
+                    ? (percent ? cart.discountPercent : cart.discount).toStringAsFixed(0)
+                    : '',
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: percent ? 'Discount (%)' : 'Discount (₹)',
+                  prefixIcon: const Icon(Icons.discount_outlined),
+                ),
+                onChanged: (value) {
+                  final amount = double.tryParse(value) ?? 0;
+                  if (percent) {
+                    cart.setPercentDiscount(amount);
+                  } else {
+                    cart.setDiscount(amount);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 'flat', label: Text('₹')),
+                ButtonSegment(value: 'percent', label: Text('%')),
+              ],
+              selected: {cart.discountType},
+              onSelectionChanged: (value) {
+                if (value.first == 'percent') {
+                  cart.setPercentDiscount(0);
+                } else {
+                  cart.setDiscount(0);
+                }
+              },
+            ),
+          ],
+        ),
+        if (hasDiscount) ...[
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: cart.discountReason,
+            maxLength: 60,
+            decoration: const InputDecoration(
+              labelText: 'Discount reason (optional)',
+              hintText: 'e.g. Regular customer, Staff, Festival offer',
+              counterText: '',
+              prefixIcon: Icon(Icons.edit_note_outlined),
+            ),
+            onChanged: cart.setDiscountReason,
+          ),
+        ],
+        if ((quote?.serviceChargePercent ?? 0) > 0 || cart.serviceChargeOn != null)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Service charge'),
+            subtitle: Text(
+              quote != null && quote.serviceCharge > 0
+                  ? '${quote.serviceChargePercent.toStringAsFixed(0)}% · ${Formatters.currency(quote.serviceCharge)}'
+                  : 'Not added on this bill',
+            ),
+            value: cart.serviceChargeOn ?? (quote?.serviceCharge ?? 0) > 0,
+            onChanged: (value) => cart.setServiceCharge(value),
+          ),
+      ],
     );
   }
 
@@ -466,7 +529,13 @@ class _CartSheetState extends State<CartSheet> {
               Formatters.currency(cart.subtotal),
             ),
 
-            if (cart.discount > 0)
+            if (cart.quoteIsCurrent)
+              for (final row in cart.quote!.rows())
+                _summaryRow(
+                  row.$1,
+                  row.$2 < 0 ? '- ${Formatters.currency(-row.$2)}' : Formatters.currency(row.$2),
+                )
+            else if (cart.discount > 0)
               _summaryRow(
                 'Discount',
                 '- ${Formatters.currency(cart.discount)}',
@@ -616,6 +685,31 @@ class _CartLineTile extends StatelessWidget {
     required this.item,
   });
 
+  Future<void> _editNote(BuildContext context, CartProvider cart) async {
+    final controller = TextEditingController(text: item.note);
+    final note = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(item.product.name),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 120,
+          decoration: const InputDecoration(
+            labelText: 'Note for kitchen',
+            hintText: 'e.g. Less spicy, no onion',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (note != null) cart.setItemNote(item.product.id, note);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = context.read<CartProvider>();
@@ -659,6 +753,22 @@ class _CartLineTile extends StatelessWidget {
                   ),
                   style:
                       Theme.of(context).textTheme.bodyMedium,
+                ),
+                InkWell(
+                  onTap: () => _editNote(context, cart),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      item.note.isEmpty ? '+ Add note for kitchen' : 'Note: ${item.note}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: item.note.isEmpty ? AppColors.primary : AppColors.warning,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),

@@ -14,7 +14,8 @@
     "check": "node scripts/check-syntax.js",
     "reset:fresh": "node src/utils/resetFreshDatabase.js",
     "set:admin": "node src/utils/setAdminCredentials.js",
-    "create:admin": "node src/utils/createAdmin.js"
+    "create:admin": "node src/utils/createAdmin.js",
+    "platform:init": "node src/utils/platformInit.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

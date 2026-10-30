@@ -13,7 +13,9 @@
 //
 // Never hardcode localhost/127.0.0.1/private IPs here.
 
-function publicMenuUrl(tableNumber) {
+// `outletKey` ("<businessCode>:<outletCode>") sends the customer to one
+// outlet of a platform client; without it the default client is used.
+function publicMenuUrl(tableNumber, outletKey = '') {
   const configured = (process.env.WEB_MENU_BASE_URL || '').trim().replace(/\/+$/, '');
   const renderUrl = (process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/+$/, '');
   const base = configured || (renderUrl ? `${renderUrl}/menu` : '');
@@ -28,7 +30,8 @@ function publicMenuUrl(tableNumber) {
     throw new Error(`Invalid table number: ${tableNumber}`);
   }
 
-  return `${base}?table=${number}`;
+  const outlet = outletKey ? `&o=${encodeURIComponent(outletKey)}` : '';
+  return `${base}?table=${number}${outlet}`;
 }
 
 module.exports = { publicMenuUrl };

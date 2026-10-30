@@ -1,9 +1,65 @@
 import '../core/network/dio_client.dart';
 import '../models/order.dart';
+import '../models/bill.dart';
 import '../models/cart_item.dart';
 
 class OrderService {
   final _dio = DioClient.instance.dio;
+
+  /// Cart lines as the API expects them (menu item or quick item, with the
+  /// kitchen note). Prices are never sent; the server takes them from the menu.
+  static List<Map<String, dynamic>> itemsPayload(List<CartItem> items) => items
+      .map((item) => {
+            if (item.product.id.startsWith('quick:'))
+              'quickItem': {'name': item.product.name, 'price': item.product.sellingPrice}
+            else
+              'productId': item.product.id,
+            'quantity': item.quantity,
+            if (item.note.trim().isNotEmpty) 'note': item.note.trim(),
+          })
+      .toList();
+
+  /// Bill preview (GST, charges, round-off) exactly as the final bill will
+  /// be calculated; nothing is saved. [adjust] = discount/charge choices.
+  Future<BillBreakdown> quote({
+    required List<CartItem> items,
+    required String orderType,
+    Map<String, dynamic> adjust = const {},
+  }) async {
+    try {
+      final res = await _dio.post('/orders/quote', data: {
+        'items': itemsPayload(items),
+        'orderType': orderType,
+        ...adjust,
+      });
+      return BillBreakdown.fromJson(res.data['data'] as Map<String, dynamic>);
+    } catch (e) {
+      throw DioClient.instance.mapError(e);
+    }
+  }
+
+  /// Moves some lines ({index, quantity}) of an open order to a new open order.
+  Future<Order> splitOpenOrder(String orderId, List<Map<String, int>> lines, {String? label}) async {
+    try {
+      final res = await _dio.post('/orders/$orderId/split', data: {
+        'lines': lines,
+        if (label != null && label.trim().isNotEmpty) 'label': label.trim(),
+      });
+      return Order.fromJson(res.data['data']['newOrder'] as Map<String, dynamic>);
+    } catch (e) {
+      throw DioClient.instance.mapError(e);
+    }
+  }
+
+  /// Moves every item of [fromOrderId] into [orderId] and closes the other order.
+  Future<Order> mergeOpenOrders(String orderId, String fromOrderId) async {
+    try {
+      final res = await _dio.post('/orders/$orderId/merge', data: {'fromOrderId': fromOrderId});
+      return Order.fromJson(res.data['data']['order'] as Map<String, dynamic>);
+    } catch (e) {
+      throw DioClient.instance.mapError(e);
+    }
+  }
 
   /// Creates a completed bill.
   ///
@@ -33,25 +89,13 @@ class OrderService {
     String? tableCustomerLabel,
     Map<String, String>? deliveryInfo,
     String? clientRequestId,
+    Map<String, dynamic> extra = const {},
   }) async {
     try {
       final res = await _dio.post(
         '/orders',
         data: {
-          'items': items
-              .map(
-                (item) => {
-                  if (item.product.id.startsWith('quick:'))
-                    'quickItem': {
-                      'name': item.product.name,
-                      'price': item.product.sellingPrice,
-                    }
-                  else
-                    'productId': item.product.id,
-                  'quantity': item.quantity,
-                },
-              )
-              .toList(),
+          'items': itemsPayload(items),
           'discount': discount,
           'paymentMethod': paymentMethod,
           if (amountReceived != null) 'amountReceived': amountReceived,
@@ -73,6 +117,7 @@ class OrderService {
           if (clientRequestId != null &&
               clientRequestId.trim().isNotEmpty)
             'clientRequestId': clientRequestId,
+          ...extra,
         },
       );
 
@@ -130,31 +175,20 @@ class OrderService {
     String? notes,
     String? customerId,
     String? tableCustomerLabel,
+    Map<String, dynamic> extra = const {},
   }) async {
     try {
       final res = await _dio.put(
         '/orders/$orderId/items',
         data: {
-          'items': items
-              .map(
-                (item) => {
-                  if (item.product.id.startsWith('quick:'))
-                    'quickItem': {
-                      'name': item.product.name,
-                      'price': item.product.sellingPrice,
-                    }
-                  else
-                    'productId': item.product.id,
-                  'quantity': item.quantity,
-                },
-              )
-              .toList(),
+          'items': itemsPayload(items),
           'discount': discount,
           if (notes != null) 'notes': notes,
           if (customerId != null && customerId.trim().isNotEmpty)
             'customerId': customerId,
           if (tableCustomerLabel != null && tableCustomerLabel.trim().isNotEmpty)
             'tableCustomerLabel': tableCustomerLabel.trim(),
+          ...extra,
         },
       );
 
@@ -187,6 +221,7 @@ class OrderService {
     double? upiPortion,
     double? creditPortion,
     double? discount,
+    Map<String, dynamic> extra = const {},
   }) async {
     try {
       final res = await _dio.post(
@@ -202,6 +237,7 @@ class OrderService {
           if (upiPortion != null) 'upiPortion': upiPortion,
           if (creditPortion != null) 'creditPortion': creditPortion,
           if (discount != null) 'discount': discount,
+          ...extra,
         },
       );
 

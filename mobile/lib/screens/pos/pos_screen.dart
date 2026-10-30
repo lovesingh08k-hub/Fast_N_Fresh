@@ -37,6 +37,9 @@ class PosScreen extends StatefulWidget {
   final List<OrderItem>? existingItems;
   final double? existingDiscount;
 
+  /// The open order being edited (restores discount/charge choices).
+  final Order? existingOrder;
+
   /// If true, the cart sheet will open automatically
   /// after the POS screen is displayed.
   final bool autoOpenCart;
@@ -50,6 +53,7 @@ class PosScreen extends StatefulWidget {
     this.openOrderId,
     this.existingItems,
     this.existingDiscount,
+    this.existingOrder,
     this.autoOpenCart = false,
   });
 
@@ -140,13 +144,23 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
                         categoryId: '',
                         sellingPrice: oi.price,
                         imageUrl: oi.imageUrl,
+                        taxRate: oi.taxRate,
                       ),
                       quantity: oi.quantity,
+                      note: oi.note ?? '',
                     ),
                   )
                   .toList(),
               discount: widget.existingDiscount ?? 0,
             );
+        final existing = widget.existingOrder;
+        if (existing != null) {
+          context.read<CartProvider>().restoreAdjustments(
+                existing.bill,
+                serviceCharge: existing.serviceChargeEnabled,
+                deliveryCharge: existing.deliveryChargeOverride,
+              );
+        }
       }
 
       unawaited(_loadRunningOrders());

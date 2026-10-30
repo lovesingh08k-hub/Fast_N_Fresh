@@ -4,7 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/fresh_ui.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/cart_provider.dart';
+import '../../providers/catalog_provider.dart';
 import '../../providers/tab_refresh_bus.dart';
 import '../../models/user.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -28,6 +31,9 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+
+  /// Tab the app opens on and back returns to: Home, or New Sale for staff.
+  int _homeIndex = 0;
   late final AppUser _user;
   late final List<_NavItem> _items;
   late final List<Widget> _pages;
@@ -38,7 +44,15 @@ class _MainShellState extends State<MainShell> {
     _user = context.read<AuthProvider>().currentUser!;
     _items = _buildNavigation(_user);
     _pages = _items.map((item) => item.page).toList(growable: false);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForAvailableUpdate());
+    _homeIndex = _user.canViewDashboard ? 0 : _items.indexWhere((item) => item.label == 'New Sale');
+    _index = _homeIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // A new shell means a new login or outlet: drop the previous outlet's
+      // menu and cart.
+      context.read<CatalogProvider>().reset();
+      context.read<CartProvider>().clear();
+      _checkForAvailableUpdate();
+    });
   }
 
   Future<void> _checkForAvailableUpdate() async {
@@ -93,11 +107,12 @@ class _MainShellState extends State<MainShell> {
   List<_NavItem> _buildNavigation(AppUser user) {
     if (user.canViewDashboard) {
       return [
-        const _NavItem('Home', Icons.grid_view_rounded, Icons.grid_view_rounded, DashboardScreen()),
-        const _NavItem('New Sale', Icons.add_circle_outline_rounded, Icons.add_circle_rounded, NewOrderScreen()),
-        const _NavItem('Orders', Icons.receipt_long_outlined, Icons.receipt_long_rounded, OrdersScreen()),
+        // "New Sale" sits in the middle as the raised round button.
+        const _NavItem('Home', Icons.home_outlined, Icons.home_rounded, DashboardScreen()),
+        const _NavItem('Orders', Icons.table_restaurant_outlined, Icons.table_restaurant_rounded, OrdersScreen()),
+        const _NavItem('New Sale', Icons.add_rounded, Icons.add_rounded, NewOrderScreen()),
         const _NavItem('Bills', Icons.receipt_long_outlined, Icons.receipt_long_rounded, BillHistoryScreen()),
-        const _NavItem('More', Icons.apps_outlined, Icons.apps_rounded, MoreScreen()),
+        const _NavItem('More', Icons.grid_view_outlined, Icons.grid_view_rounded, MoreScreen()),
       ];
     }
 
@@ -105,9 +120,9 @@ class _MainShellState extends State<MainShell> {
     // Customers and profile remain available from Workspace rather than
     // consuming permanent bottom-navigation space.
     return [
-      const _NavItem('New Sale', Icons.add_circle_outline_rounded, Icons.add_circle_rounded, NewOrderScreen()),
-      const _NavItem('Orders', Icons.receipt_long_outlined, Icons.receipt_long_rounded, OrdersScreen()),
-      const _NavItem('More', Icons.apps_outlined, Icons.apps_rounded, MoreScreen()),
+      const _NavItem('Orders', Icons.table_restaurant_outlined, Icons.table_restaurant_rounded, OrdersScreen()),
+      const _NavItem('New Sale', Icons.add_rounded, Icons.add_rounded, NewOrderScreen()),
+      const _NavItem('More', Icons.grid_view_outlined, Icons.grid_view_rounded, MoreScreen()),
     ];
   }
 
@@ -117,8 +132,8 @@ class _MainShellState extends State<MainShell> {
   /// another tab -> first tab; first tab -> "press back again to exit", so
   /// a single back press never closes the whole app by accident.
   void _onBackPressed() {
-    if (_index != 0) {
-      _select(0);
+    if (_index != _homeIndex) {
+      _select(_homeIndex);
       return;
     }
     final now = DateTime.now();
@@ -239,30 +254,89 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildBottomBar(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: NavigationBar(
-          height: 60,
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          indicatorColor: AppColors.primaryLight,
-          selectedIndex: _index,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          onDestinationSelected: _select,
-          destinations: _items
-              .map((item) => NavigationDestination(
-                    icon: Icon(item.icon),
-                    selectedIcon: Icon(item.selectedIcon),
-                    label: item.label,
-                  ))
-              .toList(growable: false),
+    final centre = _items.indexWhere((item) => item.label == 'New Sale');
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: AppColors.cardShadow, blurRadius: 24, offset: const Offset(0, -6))],
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 68,
+          child: Row(
+            children: [
+              for (var i = 0; i < _items.length; i++)
+                Expanded(child: i == centre ? _centreButton(i) : _tab(i)),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _tab(int index) {
+    final item = _items[index];
+    final selected = _index == index;
+    final color = selected ? AppColors.primary : AppColors.textMuted;
+    return InkWell(
+      onTap: () => _select(index),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primaryLight : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(selected ? item.selectedIcon : item.icon, color: color, size: 23),
+          ),
+          const SizedBox(height: 3),
+          Text(item.label, style: TextStyle(fontSize: 11, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _centreButton(int index) {
+    final selected = _index == index;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Tooltip(
+          message: 'New Sale',
+          child: Material(
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            elevation: 0,
+            color: Colors.transparent,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => _select(index),
+              child: Ink(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: FreshUi.greenGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: selected ? .45 : .30),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

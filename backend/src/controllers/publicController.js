@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { Product, Category, Table, Order, Counter, BusinessSettings } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
+const { computeBill, billFields } = require('../services/billing');
 const { pushNewOrderAlert } = require('../utils/push');
 const { getPaymentProvider } = require('../services/paymentProvider');
 
@@ -211,12 +212,14 @@ const createPublicOrder = asyncHandler(async (req, res) => {
     // never read or trusted anywhere in this flow.
     const lineTotal = round2(product.sellingPrice * quantity);
     subtotal = round2(subtotal + lineTotal);
-    orderItems.push({ product: product._id, name: product.name, price: product.sellingPrice, quantity, total: lineTotal });
+    orderItems.push({ product: product._id, name: product.name, price: product.sellingPrice, quantity, total: lineTotal, taxRate: product.taxRate });
   }
 
+  // Same bill calculation as the POS (GST per item, dine-in charges,
+  // round-off); staff checkout recalculates it again from the menu.
   const settings = await BusinessSettings.getSettings();
-  const tax = settings.taxEnabled ? round2((subtotal * settings.taxPercent) / 100) : 0;
-  const grandTotal = round2(subtotal + tax);
+  const bill = computeBill({ lines: orderItems, settings, orderType: 'dine_in' });
+  const { grandTotal } = bill;
 
   const orderNumber = await Counter.getNextSequence('orderNumber');
 
@@ -231,7 +234,6 @@ const createPublicOrder = asyncHandler(async (req, res) => {
     order = await Order.create({
       orderNumber,
       clientRequestId: normalizedClientRequestId,
-      items: orderItems,
       orderType: 'dine_in',
       orderSource: 'qr',
       table: table._id,
@@ -240,13 +242,12 @@ const createPublicOrder = asyncHandler(async (req, res) => {
         name: (customerName && customerName.trim()) || undefined,
         phone: (customerPhone && customerPhone.trim()) || undefined,
       },
-      subtotal,
-      tax,
-      grandTotal,
+      items: bill.orderItems,
+      ...billFields(bill),
       paymentMethod: normalizedPaymentMethod,
       paymentStatus: initialPaymentStatus,
       paymentInitiatedAt: normalizedPaymentMethod === 'UPI' ? new Date() : undefined,
-      paymentBreakdown: { cash: 0, upi: 0, credit: 0 },
+      paymentBreakdown: { cash: 0, upi: 0, card: 0, online: 0, credit: 0 },
       notes: note ? note.trim() : undefined,
       status: 'open',
       estimatedReadyAt: undefined,

@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/fresh_ui.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/widgets/state_widgets.dart';
@@ -332,103 +334,149 @@ class _CustomerTile extends StatelessWidget {
     required this.canViewCreditHistory,
   });
 
+  static const _avatarColors = [
+    Color(0xFFF2643D),
+    Color(0xFF3B82F6),
+    Color(0xFF8B5CF6),
+    Color(0xFF1FA463),
+    Color(0xFFF59E0B),
+    Color(0xFFEC4899),
+  ];
+
+  String get _initials {
+    final parts = customer.name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    return (parts.first[0] + (parts.length > 1 ? parts.last[0] : '')).toUpperCase();
+  }
+
+  /// 10-digit Indian mobile numbers get the +91 country code for WhatsApp.
+  String get _waNumber {
+    final digits = customer.phone.replaceAll(RegExp(r'\D'), '');
+    return digits.length == 10 ? '91$digits' : digits;
+  }
+
+  Future<void> _launch(BuildContext context, Uri uri) async {
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication).catchError((_) => false);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the app on this device.')));
+    }
+  }
+
+  Widget _roundAction(IconData icon, Color color, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: color.withValues(alpha: .12),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(width: 36, height: 36, child: Icon(icon, size: 18, color: color)),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () async {
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => CustomerDetailScreen(
-              customerId: customer.id,
-            ),
-          ),
-        );
+    final color = _avatarColors[customer.name.hashCode.abs() % _avatarColors.length];
+    final address = customer.address?.trim() ?? '';
 
-        if (context.mounted) {
-          onChanged();
-        }
-      },
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppColors.border,
-          ),
-        ),
-        child: Row(
-          children: [
-            // ---------------------------------------------------------
-            // CUSTOMER AVATAR
-            // ---------------------------------------------------------
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.primaryLight,
-              child: Text(
-                customer.name.isNotEmpty
-                    ? customer.name[0].toUpperCase()
-                    : '?',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w700,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => CustomerDetailScreen(customerId: customer.id),
+            ),
+          );
+          if (context.mounted) onChanged();
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          padding: const EdgeInsets.all(12),
+          decoration: FreshUi.card(radius: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 23,
+                    backgroundColor: color.withValues(alpha: .15),
+                    child: Text(_initials, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 15)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(customer.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary)),
+                        const SizedBox(height: 2),
+                        Text(customer.phone, style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  if (customer.phone.trim().isNotEmpty) ...[
+                    _roundAction(Icons.call_rounded, AppColors.success, 'Call',
+                        () => _launch(context, Uri(scheme: 'tel', path: customer.phone.trim()))),
+                    const SizedBox(width: 8),
+                    _roundAction(Icons.chat_rounded, AppColors.primary, 'WhatsApp',
+                        () => _launch(context, Uri.parse('https://wa.me/$_waNumber'))),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(14)),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Address', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          const SizedBox(height: 3),
+                          Text(address.isEmpty ? '—' : address, maxLines: 2, overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(canViewCreditHistory ? 'Udhar due' : 'Total spent', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          const SizedBox(height: 3),
+                          Text(
+                            Formatters.currency(canViewCreditHistory ? customer.outstandingBalance : customer.totalPurchases),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: canViewCreditHistory
+                                  ? (customer.hasDue ? AppColors.credit : AppColors.success)
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                          if (customer.createdAt != null) ...[
+                            const SizedBox(height: 4),
+                            Text('Since ${Formatters.shortDate(customer.createdAt!)}', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-
-            const SizedBox(width: 12),
-
-            // ---------------------------------------------------------
-            // CUSTOMER NAME + PHONE
-            // ---------------------------------------------------------
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    customer.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    customer.phone,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-
-            // ---------------------------------------------------------
-            // DUE
-            // ONLY ADMIN + MANAGER
-            // ---------------------------------------------------------
-            if (canViewCreditHistory)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Due',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  Text(
-                    Formatters.currency(
-                      customer.outstandingBalance,
-                    ),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: customer.hasDue
-                          ? AppColors.credit
-                          : AppColors.success,
-                    ),
-                  ),
-                ],
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

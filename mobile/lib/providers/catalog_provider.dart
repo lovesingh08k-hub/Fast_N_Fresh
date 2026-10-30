@@ -22,6 +22,15 @@ class CatalogProvider extends ChangeNotifier {
   String? categoryErrorMessage;
   Future<void>? _activeLoad;
 
+  /// Forgets the loaded menu, e.g. after switching outlet or logging out.
+  void reset() {
+    products = [];
+    categories = [];
+    errorMessage = null;
+    categoryErrorMessage = null;
+    notifyListeners();
+  }
+
   Future<void> ensureLoaded() {
     if (products.isNotEmpty) {
       // Categories can still be missing independently; refresh them in the

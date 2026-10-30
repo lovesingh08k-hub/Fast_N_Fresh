@@ -195,6 +195,8 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
         discount: order.discount,
         notes: order.notes,
         customerId: order.customerId,
+        // Keep a % discount as a % when quantities change.
+        extra: {'discountType': order.bill.discountType, 'discountValue': order.bill.discountValue},
       );
       if (!mounted) return;
       final index = _openOrders.indexWhere((o) => o.id == order.id);
@@ -272,6 +274,7 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
           discount: cart.discount,
           notes: cart.notes,
           customerId: cart.selectedCustomer?.id,
+          extra: cart.billAdjustments,
         );
       } finally {
         if (mounted) setState(() => _busyOrders.remove(order.id));
@@ -322,13 +325,16 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
                 categoryId: '',
                 sellingPrice: item.price,
                 imageUrl: item.imageUrl,
+                taxRate: item.taxRate,
               ),
               quantity: item.quantity,
+              note: item.note ?? '',
             ),
           )
           .toList(),
       discount: order.discount,
     );
+    cart.restoreAdjustments(order.bill, serviceCharge: order.serviceChargeEnabled, deliveryCharge: order.deliveryChargeOverride);
     cart.setNotes(order.notes ?? '');
 
     final saved = await showModalBottomSheet<bool>(
@@ -357,6 +363,7 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
         discount: cart.discount,
         notes: cart.notes,
         customerId: cart.selectedCustomer?.id,
+        extra: cart.billAdjustments,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -386,6 +393,7 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
           openOrderId: order.id,
           existingItems: order.items,
           existingDiscount: order.discount,
+          existingOrder: order,
           autoOpenCart: autoOpenCart,
         ),
       ),
@@ -600,6 +608,109 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
     });
   }
 
+  /// Moves chosen quantities of [order] to a new bill on this table.
+  Future<void> _splitOrder(Order order) async {
+    final moving = List<int>.filled(order.items.length, 0);
+    final lines = await showDialog<List<Map<String, int>>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          final total = moving.fold<int>(0, (a, b) => a + b);
+          final left = order.items.fold<int>(0, (a, i) => a + i.quantity) - total;
+          return AlertDialog(
+            title: Text('Split bill #${order.orderNumber}'),
+            content: SizedBox(
+              width: 420,
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  const Text('Choose items for the new bill:'),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < order.items.length; i++)
+                    Row(
+                      children: [
+                        Expanded(child: Text('${order.items[i].name} (of ${order.items[i].quantity})')),
+                        IconButton(
+                          onPressed: moving[i] > 0 ? () => setDialog(() => moving[i]--) : null,
+                          icon: const Icon(Icons.remove_circle_outline),
+                        ),
+                        Text('${moving[i]}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                        IconButton(
+                          onPressed: moving[i] < order.items[i].quantity ? () => setDialog(() => moving[i]++) : null,
+                          icon: const Icon(Icons.add_circle_outline),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: total == 0 || left == 0
+                    ? null
+                    : () => Navigator.pop(ctx, [
+                          for (var i = 0; i < moving.length; i++)
+                            if (moving[i] > 0) {'index': i, 'quantity': moving[i]},
+                        ]),
+                child: Text(total == 0 ? 'Split' : 'Move $total item${total == 1 ? '' : 's'}'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (lines == null || !mounted) return;
+    try {
+      final created = await _orderService.splitOpenOrder(order.id, lines);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('New bill #${created.orderNumber} created.')));
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Moves every item of another bill on this table into [order].
+  Future<void> _mergeOrder(Order order) async {
+    final others = _openOrders.where((o) => o.id != order.id).toList();
+    final from = await showModalBottomSheet<Order>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Merge into bill #${order.orderNumber}', style: Theme.of(ctx).textTheme.titleMedium),
+              ),
+            ),
+            for (final other in others)
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: Text('#${other.orderNumber} ${other.printCustomerName ?? ''}'),
+                subtitle: Text('${other.items.length} items · ${Formatters.currency(other.grandTotal)}'),
+                onTap: () => Navigator.pop(ctx, other),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (from == null || !mounted) return;
+    try {
+      await _orderService.mergeOpenOrders(order.id, from.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Bill #${from.orderNumber} merged into #${order.orderNumber}.')));
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _menu(Order order) async {
     final canManage = context.read<AuthProvider>().currentUser?.canManageTables ?? false;
     await showModalBottomSheet<void>(
@@ -619,6 +730,20 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
               title: const Text('Shift to Table'),
               onTap: () => _closeMenuThen(ctx, () => _shiftOrder(order)),
             ),
+            if (order.items.fold<int>(0, (n, i) => n + i.quantity) > 1)
+              ListTile(
+                leading: const Icon(Icons.call_split),
+                title: const Text('Split Bill'),
+                subtitle: const Text('Move some items to a separate bill'),
+                onTap: () => _closeMenuThen(ctx, () => _splitOrder(order)),
+              ),
+            if (_openOrders.where((o) => o.id != order.id).isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.merge_type),
+                title: const Text('Merge Bills'),
+                subtitle: const Text('Add another bill of this table into this one'),
+                onTap: () => _closeMenuThen(ctx, () => _mergeOrder(order)),
+              ),
             ListTile(
               leading: const Icon(Icons.cancel_outlined),
               title: const Text('Cancel Order'),

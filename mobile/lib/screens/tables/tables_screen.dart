@@ -30,6 +30,15 @@ class _TablesScreenState extends State<TablesScreen> with WidgetsBindingObserver
   final GlobalKey<CountersPanelState> _takeawayKey = GlobalKey<CountersPanelState>();
   final GlobalKey<CountersPanelState> _deliveryKey = GlobalKey<CountersPanelState>();
   List<CafeTable> _tables = [];
+
+  /// Floor / area filter ('' = all areas).
+  String _area = '';
+
+  List<String> get _areas =>
+      (_tables.map((t) => t.area.trim()).where((a) => a.isNotEmpty).toSet().toList()..sort());
+
+  List<CafeTable> get _visibleTables =>
+      _area.isEmpty ? _tables : _tables.where((t) => t.area.trim() == _area).toList();
   bool _loading = true;
   String? _error;
   AppLifecycleState? _lastLifecycleState;
@@ -349,25 +358,55 @@ class _TablesScreenState extends State<TablesScreen> with WidgetsBindingObserver
                         child: Text('No tables found.', style: TextStyle(color: AppColors.textMuted)),
                       ),
                     )
-                  : GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _tables.length,
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 330,
-                        mainAxisExtent: 154,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                      itemBuilder: (_, i) => _TableCard(
-                        table: _tables[i],
-                        canManage: _canManage,
-                        onTap: () => _openTable(_tables[i]),
-                        onShowQr: () => _showTableQr(_tables[i]),
-                        onClearOrders: () => _clearTableOrders(_tables[i]),
-                        onRename: () => _renameTable(_tables[i]),
-                        onDelete: () => _deleteTable(_tables[i]),
-                      ),
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_areas.isNotEmpty) ...[
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                for (final area in ['', ..._areas])
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ChoiceChip(
+                                      label: Text(area.isEmpty ? 'All areas' : area),
+                                      selected: _area == area,
+                                      showCheckmark: false,
+                                      onSelected: (_) => setState(() => _area = area),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        _legend(_visibleTables),
+                        const SizedBox(height: 12),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _visibleTables.length,
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 330,
+                            mainAxisExtent: 154,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
+                          itemBuilder: (_, i) {
+                            final table = _visibleTables[i];
+                            return _TableCard(
+                              table: table,
+                              canManage: _canManage,
+                              onTap: () => _openTable(table),
+                              onShowQr: () => _showTableQr(table),
+                              onClearOrders: () => _clearTableOrders(table),
+                              onRename: () => _renameTable(table),
+                              onDelete: () => _deleteTable(table),
+                            );
+                          },
+                        ),
+                      ],
                     ),
             ),
             const SizedBox(height: 18),
@@ -377,6 +416,29 @@ class _TablesScreenState extends State<TablesScreen> with WidgetsBindingObserver
           ],
         ),
         if (_loading) const Positioned(top: 0, left: 0, right: 0, child: LinearProgressIndicator()),
+      ],
+    );
+  }
+
+  /// "● Available 3  ● Occupied 4  ● Reserved 1" for the shown tables.
+  Widget _legend(List<CafeTable> tables) {
+    Widget dot(Color color, String label, int count) => Padding(
+          padding: const EdgeInsets.only(right: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 9, height: 9, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Text('$label : $count', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+            ],
+          ),
+        );
+    return Wrap(
+      runSpacing: 6,
+      children: [
+        dot(AppColors.success, 'Available', tables.where((t) => t.isAvailable).length),
+        dot(AppColors.primary, 'Occupied', tables.where((t) => t.isOccupied).length),
+        dot(AppColors.warning, 'Reserved', tables.where((t) => t.isReserved).length),
       ],
     );
   }
@@ -582,10 +644,11 @@ class _TableCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: table.isOccupied ? AppColors.primaryLight.withValues(alpha: .32) : AppColors.background,
-          borderRadius: BorderRadius.circular(16),
+          color: table.isOccupied ? Color.alphaBlend(AppColors.primary.withValues(alpha: .06), AppColors.surface) : AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(color: AppColors.cardShadow, blurRadius: 14, offset: const Offset(0, 5))],
           border: Border.all(
             color: table.isOccupied ? _statusColor.withValues(alpha: .35) : AppColors.border,
             width: table.isOccupied ? 1.4 : 1,
@@ -594,6 +657,7 @@ class _TableCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Name on its own line so it is never squeezed out on narrow cards.
             Row(
               children: [
                 Expanded(
@@ -601,18 +665,7 @@ class _TableCard extends StatelessWidget {
                     table.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _statusColor.withValues(alpha: .10),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _statusText,
-                    style: TextStyle(color: _statusColor, fontWeight: FontWeight.w700, fontSize: 11),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -620,51 +673,68 @@ class _TableCard extends StatelessWidget {
                   onTap: () => _showMenu(context),
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: Icon(Icons.more_horiz, size: 20, color: AppColors.primary),
+                    child: Icon(Icons.more_horiz, size: 18, color: AppColors.primary),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: _statusColor.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _statusText,
+                style: TextStyle(color: _statusColor, fontWeight: FontWeight.w700, fontSize: 11),
+              ),
             ),
             const Spacer(),
             if (table.isOccupied)
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(20)),
                     child: Text(
                       '${table.openItemCount} Item${table.openItemCount == 1 ? '' : 's'}',
-                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 12),
+                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 11.5),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    '${table.openOrderCount} active order${table.openOrderCount == 1 ? '' : 's'}',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                  ),
-                  const Spacer(),
                   if (_ageText().isNotEmpty)
-                    Text(_ageText(), style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    Expanded(
+                      child: Text(_ageText(), maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5)),
+                    ),
                 ],
               )
             else
               Row(
                 children: [
-                  Container(width: 9, height: 9, decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle)),
-                  const SizedBox(width: 7),
-                  Text(_statusText, style: TextStyle(color: _statusColor, fontWeight: FontWeight.w700, fontSize: 12)),
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: AppColors.success, shape: BoxShape.circle)),
+                  const SizedBox(width: 6),
+                  Text('Ready for guests', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700, fontSize: 12)),
                 ],
               ),
             const SizedBox(height: 7),
             Row(
               children: [
-                Expanded(child: Text('Seats ${table.capacity}', style: TextStyle(color: AppColors.textMuted, fontSize: 12))),
+                Expanded(
+                  child: Text(
+                    table.area.trim().isEmpty ? 'Seats ${table.capacity}' : 'Seats ${table.capacity} · ${table.area.trim()}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                ),
                 if (table.hasQrNumber) Icon(Icons.qr_code_2, size: 16, color: AppColors.textMuted),
               ],
             ),

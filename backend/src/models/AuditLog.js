@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
+const userRef = require('./userRef');
 
 const auditLogSchema = new mongoose.Schema({
-  actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  actor: { type: mongoose.Schema.Types.ObjectId, ref: userRef },
   action: { type: String, required: true, index: true },
   entityType: { type: String, required: true, index: true },
   entityId: { type: mongoose.Schema.Types.ObjectId, index: true },

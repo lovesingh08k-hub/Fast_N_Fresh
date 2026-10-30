@@ -1,6 +1,7 @@
 const { Customer, CreditTransaction, Order } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 const mongoose = require('mongoose');
+const { startSession } = require('../tenancy/context');
 
 function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -129,7 +130,7 @@ const recordPayment = asyncHandler(async (req, res) => {
     }
   }
 
-  const session = await mongoose.startSession();
+  const session = await startSession();
   let resultCustomer;
   let resultTransaction;
 

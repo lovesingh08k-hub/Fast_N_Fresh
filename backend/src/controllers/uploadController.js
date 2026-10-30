@@ -1,6 +1,8 @@
 const fs = require('fs/promises');
 const { ImageAsset } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
+const { currentContext } = require('../tenancy/context');
+const { outletKey } = require('../tenancy/resolver');
 
 // POST /api/uploads/product-image
 // Stores the small compressed product thumbnail in MongoDB so product photos
@@ -27,9 +29,11 @@ const uploadProductImage = asyncHandler(async (req, res) => {
     await fs.unlink(req.file.path).catch(() => {});
   }
 
+  const key = outletKey(currentContext());
   res.status(201).json({
     success: true,
-    data: { url: `/uploads/products/${asset._id}` },
+    // Photos live in the outlet's database; the link names the outlet.
+    data: { url: `/uploads/products/${asset._id}${key ? `?o=${encodeURIComponent(key)}` : ''}` },
   });
 });
 

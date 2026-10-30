@@ -98,6 +98,8 @@ class _BillSuccessScreenState extends State<BillSuccessScreen> {
               Text('Bill Created!', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 6),
               Text('Bill #${order.orderNumber}', style: Theme.of(context).textTheme.bodyLarge),
+              if (order.invoiceNumber != null)
+                Text('Invoice ${order.invoiceNumber}', style: TextStyle(color: AppColors.textSecondary)),
               const SizedBox(height: 4),
               Text(Formatters.currency(order.grandTotal), style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: AppColors.primary)),
               const Spacer(),

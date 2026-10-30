@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const userRef = require('./userRef');
 
 // OrderItem is embedded as a sub-document of Order. This keeps order creation
 // atomic and avoids extra round trips, while still being a clearly defined,
@@ -15,6 +16,10 @@ const orderItemSchema = new mongoose.Schema(
     price: { type: Number, required: true, min: 0 }, // snapshot selling price at time of sale
     quantity: { type: Number, required: true, min: 1 },
     total: { type: Number, required: true, min: 0 },
+    // GST rate applied to this line (%), and an instruction for the kitchen
+    // ("less spicy") printed on the KOT.
+    taxRate: { type: Number, default: 0, min: 0 },
+    note: { type: String, trim: true, maxlength: 120 },
     // Quantity already sent to kitchen. This lets later KOTs contain only
     // newly-added quantities and prevents duplicate kitchen tickets.
     kotSentQuantity: { type: Number, default: 0, min: 0 },
@@ -37,7 +42,7 @@ const kotSchema = new mongoose.Schema(
     kotNumber: { type: Number, required: true, min: 1 },
     items: { type: [kotItemSchema], required: true, default: [] },
     status: { type: String, enum: ['new', 'preparing', 'ready', 'served', 'cancelled'], default: 'new' },
-    sentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    sentBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef },
     createdAt: { type: Date, default: Date.now },
     preparedAt: { type: Date },
     servedAt: { type: Date },
@@ -91,13 +96,52 @@ const orderSchema = new mongoose.Schema(
       phone: { type: String, trim: true },
     },
 
+    // Invoice number per outlet and financial year, e.g. "INV/26-27/0042"
+    // (set when the bill is paid). orderNumber stays the short bill/token no.
+    invoiceNumber: { type: String, trim: true, index: true, sparse: true },
+
     subtotal: { type: Number, required: true, min: 0, default: 0 },
     discount: { type: Number, default: 0, min: 0 },
+    // How the discount was given: flat ₹ or % of the subtotal, and why.
+    discountType: { type: String, enum: ['flat', 'percent'], default: 'flat' },
+    discountValue: { type: Number, default: 0, min: 0 },
+    discountReason: { type: String, trim: true },
+    // Complimentary / no-charge bill: items recorded, nothing charged.
+    complimentary: { type: Boolean, default: false },
+    // Charges before GST. The *Enabled/*Override fields keep what the
+    // cashier chose on an open order; unset = the outlet's default.
+    serviceCharge: { type: Number, default: 0, min: 0 },
+    serviceChargePercent: { type: Number, default: 0, min: 0 },
+    serviceChargeEnabled: { type: Boolean },
+    packagingCharge: { type: Number, default: 0, min: 0 },
+    packagingChargeOverride: { type: Number, min: 0 },
+    deliveryCharge: { type: Number, default: 0, min: 0 },
+    deliveryChargeOverride: { type: Number, min: 0 },
+    taxableAmount: { type: Number, default: 0, min: 0 },
+    // GST per rate. cgst+sgst (same state) or igst (other state).
+    taxes: [
+      {
+        _id: false,
+        rate: { type: Number, required: true },
+        taxable: { type: Number, default: 0 },
+        cgst: { type: Number, default: 0 },
+        sgst: { type: Number, default: 0 },
+        igst: { type: Number, default: 0 },
+        tax: { type: Number, default: 0 },
+      },
+    ],
+    taxInclusive: { type: Boolean, default: false },
+    roundOff: { type: Number, default: 0 },
     loyaltyPointsUsed: { type: Number, default: 0, min: 0 },
     tax: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0, default: 0 },
 
-    paymentMethod: { type: String, enum: ['CASH', 'UPI', 'CREDIT', 'MIXED'] },
+    // ONLINE = aggregator order (Swiggy/Zomato...) paid on the platform;
+    // COMPLIMENTARY = no-charge bill.
+    paymentMethod: { type: String, enum: ['CASH', 'UPI', 'CARD', 'ONLINE', 'CREDIT', 'MIXED', 'COMPLIMENTARY'] },
+    onlinePlatform: { type: String, trim: true },
+    onlineOrderRef: { type: String, trim: true },
+    cardReference: { type: String, trim: true },
     // Payment state is deliberately separate from kitchen/order state.
     // QR orders begin pending and become paid only at trusted staff checkout.
     //   pending            - CASH (pay-at-counter) order, or not yet started.
@@ -137,6 +181,8 @@ const orderSchema = new mongoose.Schema(
     paymentBreakdown: {
       cash: { type: Number, default: 0 },
       upi: { type: Number, default: 0 },
+      card: { type: Number, default: 0 },
+      online: { type: Number, default: 0 },
       credit: { type: Number, default: 0 },
     },
     upiReference: { type: String, trim: true },
@@ -155,7 +201,7 @@ const orderSchema = new mongoose.Schema(
     // checks it out (see orderController.checkoutOrder).
     staff: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: userRef,
       required: function () {
         return this.orderSource !== 'qr';
       },
@@ -164,7 +210,7 @@ const orderSchema = new mongoose.Schema(
     // customer/order before it's completed. Most orders will have none.
     attendedByHistory: [
       {
-        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        user: { type: mongoose.Schema.Types.ObjectId, ref: userRef },
         from: { type: Date },
         to: { type: Date },
       },
@@ -174,7 +220,7 @@ const orderSchema = new mongoose.Schema(
     estimatedReadyAt: { type: Date },
     deliveryStatus: { type: String, enum: ['new','preparing','ready','out_for_delivery','delivered','cancelled'], default: 'new', index: true },
     voidedAt: { type: Date },
-    voidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    voidedBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef },
     voidReason: { type: String, trim: true },
   },
   { timestamps: true }

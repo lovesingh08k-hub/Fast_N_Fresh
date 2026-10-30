@@ -5,6 +5,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/state_widgets.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../services/misc_services.dart';
+import 'billing_reports.dart';
 
 class ReportsScreen extends StatefulWidget {
   // When true (used for Manager access), only the Credit/UDHAR report is
@@ -25,7 +26,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     if (!widget.creditOnly) {
-      _tabController = TabController(length: 4, vsync: this);
+      _tabController = TabController(length: 6, vsync: this);
     }
   }
 
@@ -53,13 +54,15 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.textMuted,
           indicatorColor: AppColors.primary,
-          tabs: const [Tab(text: 'Sales'), Tab(text: 'Products'), Tab(text: 'Staff'), Tab(text: 'Credit')],
+          tabs: const [Tab(text: 'Sales'), Tab(text: 'Day End'), Tab(text: 'GST'), Tab(text: 'Products'), Tab(text: 'Staff'), Tab(text: 'Credit')],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
           _SalesReportTab(service: _service),
+          DayEndReportTab(service: _service),
+          GstReportTab(service: _service),
           _ProductReportTab(service: _service),
           _StaffReportTab(service: _service),
           _CreditReportTab(service: _service),
@@ -171,7 +174,16 @@ class _SalesReportTabState extends State<_SalesReportTab> with WidgetsBindingObs
           const SizedBox(height: 8),
           _reportCard('Cash', Formatters.currency(d['cash'] ?? 0), AppColors.cash),
           _reportCard('UPI', Formatters.currency(d['upi'] ?? 0), AppColors.upi),
+          _reportCard('Card', Formatters.currency(d['card'] ?? 0), AppColors.info),
+          _reportCard('Online (Swiggy/Zomato)', Formatters.currency(d['online'] ?? 0), AppColors.accent),
           _reportCard('Credit', Formatters.currency(d['credit'] ?? 0), AppColors.credit),
+          const SizedBox(height: 8),
+          _reportCard('Discount given', Formatters.currency(d['discount'] ?? 0), AppColors.warning),
+          _reportCard('GST collected', Formatters.currency(d['tax'] ?? 0), AppColors.primary),
+          if ((d['serviceCharge'] ?? 0) > 0)
+            _reportCard('Service charge', Formatters.currency(d['serviceCharge'] ?? 0), AppColors.primary),
+          if ((d['complimentaryOrders'] ?? 0) > 0)
+            _reportCard('Complimentary (${d['complimentaryOrders']} bills)', Formatters.currency(d['complimentaryValue'] ?? 0), AppColors.warning),
         ],
       ),
     );

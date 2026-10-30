@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { Product, Table, BusinessSettings, PaymentTransaction } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
+const { computeBill } = require('../services/billing');
 const { getPaymentProvider } = require('../services/paymentProvider');
 const { finalizeVerifiedPayment } = require('../services/paymentService');
 const { pushNewOrderAlert } = require('../utils/push');
@@ -123,12 +124,13 @@ const createPublicPayment = asyncHandler(async (req, res) => {
       price: product.sellingPrice,
       quantity,
       total,
+      taxRate: product.taxRate,
     });
   }
 
   const settings = await BusinessSettings.getSettings();
-  const tax = settings.taxEnabled ? round2((subtotal * settings.taxPercent) / 100) : 0;
-  const amount = round2(subtotal + tax);
+  const bill = computeBill({ lines: orderItems, settings, orderType: 'dine_in' });
+  const { tax, grandTotal: amount } = bill;
 
   const provider = getPaymentProvider();
   const transaction = await PaymentTransaction.create({

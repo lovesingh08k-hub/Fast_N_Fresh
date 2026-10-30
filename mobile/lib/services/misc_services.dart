@@ -285,6 +285,26 @@ class ReportService {
     }
   }
 
+  /// GST summary per rate for a period.
+  Future<Map<String, dynamic>> taxReport({DateTime? from, DateTime? to}) async {
+    try {
+      final res = await _dio.get('/reports/tax', queryParameters: _range(from, to));
+      return res.data['data'] as Map<String, dynamic>;
+    } catch (e) {
+      throw DioClient.instance.mapError(e);
+    }
+  }
+
+  /// Day-end (Z) report for [date] (YYYY-MM-DD).
+  Future<Map<String, dynamic>> dayEndReport(String date) async {
+    try {
+      final res = await _dio.get('/reports/day-end', queryParameters: {'date': date});
+      return res.data['data'] as Map<String, dynamic>;
+    } catch (e) {
+      throw DioClient.instance.mapError(e);
+    }
+  }
+
   Map<String, dynamic> _range(DateTime? from, DateTime? to) => {
         if (from != null) 'from': from.toUtc().toIso8601String(),
         if (to != null) 'to': to.toUtc().toIso8601String(),

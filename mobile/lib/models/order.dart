@@ -1,3 +1,5 @@
+import 'bill.dart';
+
 class OrderItem {
   final String productId;
   final String name;
@@ -6,8 +8,12 @@ class OrderItem {
   final double total;
   final int kotSentQuantity;
   final String imageUrl;
+  final double taxRate;
 
-  OrderItem({required this.productId, required this.name, required this.price, required this.quantity, required this.total, this.kotSentQuantity = 0, this.imageUrl = ''});
+  /// Kitchen instruction for this line ("less spicy").
+  final String? note;
+
+  OrderItem({required this.productId, required this.name, required this.price, required this.quantity, required this.total, this.kotSentQuantity = 0, this.imageUrl = '', this.taxRate = 0, this.note});
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     final productField = json['product'];
@@ -19,6 +25,8 @@ class OrderItem {
       total: (json['total'] as num?)?.toDouble() ?? 0,
       kotSentQuantity: (json['kotSentQuantity'] as num?)?.toInt() ?? 0,
       imageUrl: productField is Map ? (productField['imageUrl'] as String? ?? '') : '',
+      taxRate: (json['taxRate'] as num?)?.toDouble() ?? 0,
+      note: (json['note'] as String?)?.trim().isNotEmpty == true ? (json['note'] as String).trim() : null,
     );
   }
 }
@@ -47,22 +55,31 @@ class KotTicket {
 class KotItem {
   final String name;
   final int quantity;
-  KotItem({required this.name, required this.quantity});
-  factory KotItem.fromJson(Map<String, dynamic> json) => KotItem(name: json['name']?.toString() ?? '', quantity: (json['quantity'] as num?)?.toInt() ?? 0);
+  final String? note; // kitchen instruction
+  KotItem({required this.name, required this.quantity, this.note});
+  factory KotItem.fromJson(Map<String, dynamic> json) => KotItem(
+        name: json['name']?.toString() ?? '',
+        quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+        note: (json['note'] as String?)?.trim().isNotEmpty == true ? (json['note'] as String).trim() : null,
+      );
 }
 
 class PaymentBreakdown {
   final double cash;
   final double upi;
+  final double card;
+  final double online;
   final double credit;
 
-  PaymentBreakdown({this.cash = 0, this.upi = 0, this.credit = 0});
+  PaymentBreakdown({this.cash = 0, this.upi = 0, this.card = 0, this.online = 0, this.credit = 0});
 
   factory PaymentBreakdown.fromJson(Map<String, dynamic>? json) {
     if (json == null) return PaymentBreakdown();
     return PaymentBreakdown(
       cash: (json['cash'] as num?)?.toDouble() ?? 0,
       upi: (json['upi'] as num?)?.toDouble() ?? 0,
+      card: (json['card'] as num?)?.toDouble() ?? 0,
+      online: (json['online'] as num?)?.toDouble() ?? 0,
       credit: (json['credit'] as num?)?.toDouble() ?? 0,
     );
   }
@@ -109,7 +126,21 @@ class Order {
   final String? tableCustomerLabel;
   final QrCustomerContact? qrCustomerContact;
   final DeliveryInfo? deliveryInfo;
-  final String paymentMethod; // CASH | UPI | CREDIT | MIXED
+  final String paymentMethod; // CASH | UPI | CARD | ONLINE | CREDIT | MIXED | COMPLIMENTARY
+
+  /// GST invoice number per outlet and financial year (paid bills).
+  final String? invoiceNumber;
+
+  /// Full calculation: discount, charges, GST per rate, round-off.
+  final BillBreakdown bill;
+  final String? onlinePlatform; // Swiggy / Zomato for ONLINE bills
+  final String? onlineOrderRef;
+  final String? cardReference;
+
+  /// Choices saved on an open order: service charge on/off and delivery
+  /// charge; null = the outlet's default.
+  final bool? serviceChargeEnabled;
+  final double? deliveryChargeOverride;
   final String paymentStatus; // pending | payment_initiated | paid | failed | cancelled
   final PaymentBreakdown paymentBreakdown;
   final String? upiReference;
@@ -145,6 +176,13 @@ class Order {
     this.qrCustomerContact,
     this.deliveryInfo,
     required this.paymentMethod,
+    this.invoiceNumber,
+    this.bill = const BillBreakdown(),
+    this.onlinePlatform,
+    this.onlineOrderRef,
+    this.cardReference,
+    this.serviceChargeEnabled,
+    this.deliveryChargeOverride,
     this.paymentStatus = 'pending',
     required this.paymentBreakdown,
     this.upiReference,
@@ -188,6 +226,13 @@ class Order {
           : null,
       deliveryInfo: json['deliveryInfo'] != null ? DeliveryInfo.fromJson(json['deliveryInfo'] as Map<String, dynamic>?) : null,
       paymentMethod: json['paymentMethod'] as String? ?? 'CASH',
+      invoiceNumber: json['invoiceNumber'] as String?,
+      bill: BillBreakdown.fromJson(json),
+      onlinePlatform: json['onlinePlatform'] as String?,
+      onlineOrderRef: json['onlineOrderRef'] as String?,
+      cardReference: json['cardReference'] as String?,
+      serviceChargeEnabled: json['serviceChargeEnabled'] as bool?,
+      deliveryChargeOverride: (json['deliveryChargeOverride'] as num?)?.toDouble(),
       paymentStatus: json['paymentStatus'] as String? ?? ((json['status'] as String?) == 'completed' ? 'paid' : 'pending'),
       paymentBreakdown: PaymentBreakdown.fromJson(json['paymentBreakdown'] as Map<String, dynamic>?),
       upiReference: json['upiReference'] as String?,

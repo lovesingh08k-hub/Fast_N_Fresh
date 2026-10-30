@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>PWP POS Platform</title>
+  <link rel="icon" href="/app/favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Login -->
+  <main id="loginView" class="center" hidden>
+    <form id="loginForm" class="card narrow">
+      <h1>PWP POS Platform</h1>
+      <p class="muted">Vendor console — manage your clients, licences and outlets.</p>
+      <label>Username <input name="username" autocomplete="username" required></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Log in</button>
+      <p class="error" id="loginError"></p>
+    </form>
+  </main>
+
+  <!-- Clients -->
+  <div id="appView" hidden>
+    <header class="topbar">
+      <strong>PWP POS Platform</strong>
+      <span class="spacer"></span>
+      <button class="ghost" id="newClientBtn">+ New client</button>
+      <button class="ghost" id="logoutBtn">Log out</button>
+    </header>
+    <main class="page">
+      <div class="summary" id="summary"></div>
+      <input id="search" class="search" placeholder="Search client name, code or phone">
+      <div id="clients"></div>
+    </main>
+  </div>
+
+  <!-- Dialog used for every form -->
+  <dialog id="dialog">
+    <form id="dialogForm" method="dialog">
+      <h2 id="dialogTitle"></h2>
+      <div id="dialogBody"></div>
+      <p class="error" id="dialogError"></p>
+      <div class="actions">
+        <button type="button" class="ghost" id="dialogCancel">Cancel</button>
+        <button type="submit" id="dialogSubmit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

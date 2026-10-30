@@ -5,6 +5,8 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/product_sizes.dart';
+import '../../core/widgets/fresh_ui.dart';
+import '../../core/widgets/pos_ui.dart';
 import '../../core/widgets/product_image.dart';
 import '../../models/product.dart';
 import '../../providers/cart_provider.dart';
@@ -162,9 +164,10 @@ class _DirectOrderScreenState extends State<DirectOrderScreen> {
     Navigator.of(context).pop();
   }
 
+  // The cart sheet closes itself before calling this, so this screen stays
+  // under the payment sheet (closing the payment sheet returns to the menu).
   void _openPayment() {
     if (!mounted) return;
-    Navigator.of(context).pop();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       showModalBottomSheet<void>(
@@ -369,6 +372,8 @@ class _DirectOrderScreenState extends State<DirectOrderScreen> {
       );
     }
 
+    // Read during build; the item builder below runs later, during layout.
+    final cart = context.watch<CartProvider>();
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
       physics: const AlwaysScrollableScrollPhysics(),
@@ -376,15 +381,23 @@ class _DirectOrderScreenState extends State<DirectOrderScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, index) {
         final product = products[index];
+        final ids = ProductSizes.variantIds(product, catalog.products);
+        final inCart = cart.items.where((i) => ids.contains(i.product.id)).toList();
+        final quantity = inCart.fold<int>(0, (n, i) => n + i.quantity);
         return _ProductRow(
           product: product,
           priceLabel: ProductSizes.priceLabel(product, catalog.products),
+          quantity: quantity,
           onAdd: () async {
             final chosen =
                 await ProductSizes.pick(context, product, catalog.products);
             if (chosen == null || !mounted) return;
             context.read<CartProvider>().addProduct(chosen);
           },
+          // With sizes, "−" removes from the last size added.
+          onRemove: inCart.isEmpty
+              ? null
+              : () => context.read<CartProvider>().decrementQuantity(inCart.last.product.id),
         );
       },
     );
@@ -416,15 +429,21 @@ class _DirectOrderScreenState extends State<DirectOrderScreen> {
   }
 }
 
+/// Menu item card: photo (or dish tile), veg/non-veg mark, name,
+/// description, price and a −/+ quantity control.
 class _ProductRow extends StatelessWidget {
   final Product product;
   final String priceLabel;
+  final int quantity;
   final VoidCallback onAdd;
+  final VoidCallback? onRemove;
 
   const _ProductRow({
     required this.product,
     required this.priceLabel,
+    required this.quantity,
     required this.onAdd,
+    this.onRemove,
   });
 
   @override
@@ -433,69 +452,75 @@ class _ProductRow extends StatelessWidget {
         (product.trackInventory && product.stock <= 0);
 
     return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(16),
+      color: Colors.transparent,
       child: InkWell(
         onTap: unavailable ? null : onAdd,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 96),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          padding: const EdgeInsets.all(10),
+          decoration: FreshUi.card(
+            radius: 20,
+            tint: quantity > 0 ? AppColors.primary : null,
+            tintStrength: quantity > 0 ? .04 : 0,
           ),
           child: Row(
             children: [
-              ProductImage(
-                name: product.name,
-                imageUrl: product.imageUrl,
-                width: 72,
-                height: 72,
-                borderRadius: BorderRadius.circular(12),
+              Stack(
+                children: [
+                  Opacity(
+                    opacity: unavailable ? .45 : 1,
+                    child: ProductImage(
+                      name: product.name,
+                      imageUrl: product.imageUrl,
+                      width: 84,
+                      height: 84,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  if (product.foodType.isNotEmpty)
+                    Positioned(left: 6, top: 6, child: FoodTypeMark(foodType: product.foodType)),
+                ],
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       ProductSizes.baseName(product),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.textPrimary),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      priceLabel,
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if (unavailable) ...[
+                    if (product.description.trim().isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
-                        product.isAvailable ? 'Out of stock' : 'Unavailable',
-                        style: TextStyle(
-                          color: AppColors.danger,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        product.description.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            priceLabel,
+                            style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w900, fontSize: 16),
+                          ),
+                        ),
+                        if (unavailable)
+                          StatusPill(
+                            label: product.isAvailable ? 'Out of stock' : 'Unavailable',
+                            color: AppColors.danger,
+                          )
+                        else
+                          QtyStepper(quantity: quantity, onAdd: onAdd, onRemove: onRemove),
+                      ],
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                unavailable
-                    ? Icons.block_outlined
-                    : Icons.add_circle_rounded,
-                color: unavailable ? AppColors.textMuted : AppColors.primary,
-                size: 30,
               ),
             ],
           ),

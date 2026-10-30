@@ -7,11 +7,13 @@ const counterSchema = new mongoose.Schema({
   seq: { type: Number, default: 0 },
 });
 
-counterSchema.statics.getNextSequence = async function getNextSequence(name) {
+// Pass the transaction `session` so a retried or failed bill does not use
+// up (skip) a number.
+counterSchema.statics.getNextSequence = async function getNextSequence(name, session) {
   const result = await this.findByIdAndUpdate(
     name,
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
+    { new: true, upsert: true, ...(session ? { session } : {}) }
   );
   return result.seq;
 };

@@ -11,6 +11,8 @@ const tableSchema = new mongoose.Schema(
     // a number is assigned; enforced unique among tables that have one set.
     number: { type: Number, min: 1, unique: true, sparse: true },
     capacity: { type: Number, default: 4, min: 1 },
+    // Floor / section the table is in ("Ground Floor", "Rooftop", "AC Hall").
+    area: { type: String, trim: true, default: '' },
     status: { type: String, enum: ['available', 'occupied', 'reserved'], default: 'available' },
     active: { type: Boolean, default: true }, // soft delete/deactivate — never hard-delete a table with order history
   },

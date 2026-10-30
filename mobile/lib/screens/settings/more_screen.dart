@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/fresh_ui.dart';
+import '../../core/widgets/outlet_switcher.dart';
 import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../attendance/attendance_screen.dart';
@@ -17,6 +18,7 @@ import '../staff/staff_screen.dart';
 import '../tables/qr_management_screen.dart';
 import '../tables/tables_screen.dart';
 import '../users/users_screen.dart';
+import 'archive_screen.dart';
 import 'change_password_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
@@ -50,6 +52,7 @@ class MoreScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _buildProfileHeader(context, user),
+            const OutletSwitcherCard(),
             const SizedBox(height: 18),
             if (user.isAdmin || user.isManager) ...[
               _section(
@@ -85,6 +88,7 @@ class MoreScreen extends StatelessWidget {
                   const _Tool('Users & Roles', Icons.admin_panel_settings_outlined, UsersScreen()),
                   const _Tool('Staff Performance', Icons.leaderboard_outlined, AttendanceScreen()),
                   const _Tool('Settings', Icons.settings_outlined, SettingsScreen()),
+                  const _Tool('Data & Storage', Icons.storage_rounded, ArchiveScreen()),
                 ],
               ),
             if (user.isStaff)

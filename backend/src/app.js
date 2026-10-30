@@ -24,6 +24,7 @@ const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { ImageAsset } = require('./models');
 const { publicMenuUrl } = require('./utils/publicUrls');
+const { withPublicOutlet } = require('./middleware/publicContext');
 
 const app = express();
 
@@ -120,7 +121,7 @@ if (process.env.NODE_ENV !== 'test') {
 // Serves uploaded product photos at e.g. GET /uploads/products/xyz.jpg —
 // the Flutter app stores/loads the relative URL returned at upload time and
 // resolves it against ApiConfig.baseUrl, so no path is ever hard-coded.
-app.get('/uploads/products/:assetId', async (req, res, next) => {
+app.get('/uploads/products/:assetId', withPublicOutlet, async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.assetId)) return next();
     const asset = await ImageAsset.findById(req.params.assetId).select('data contentType');
@@ -173,6 +174,13 @@ app.use('/app', (req, res, next) => {
   next();
 }, express.static(posWebDir, { index: 'index.html' }));
 app.get('/app', (req, res) => res.redirect(301, '/app/'));
+
+// Vendor console (clients, licences, outlets); talks to /api/platform.
+app.use('/platform', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  next();
+}, express.static(path.join(__dirname, '..', 'public', 'platform'), { index: 'index.html' }));
+app.get('/platform', (req, res) => res.redirect(301, '/platform/'));
 
 app.get('/', (req, res) => {
   res.json({

@@ -21,6 +21,7 @@ class TokenStorage {
   );
   static const _tokenKey = 'fnf_auth_token';
   static const _userKey = 'fnf_auth_user';
+  static const _sessionKey = 'fnf_business_session';
 
   Future<void> saveToken(String token) => _storage.write(key: _tokenKey, value: token);
   Future<String?> readToken() => _safeRead(_tokenKey);
@@ -28,10 +29,14 @@ class TokenStorage {
   Future<void> saveUserJson(String json) => _storage.write(key: _userKey, value: json);
   Future<String?> readUserJson() => _safeRead(_userKey);
 
+  Future<void> saveSessionJson(String json) => _storage.write(key: _sessionKey, value: json);
+  Future<String?> readSessionJson() => _safeRead(_sessionKey);
+
   Future<void> clear() async {
     try {
       await _storage.delete(key: _tokenKey);
       await _storage.delete(key: _userKey);
+      await _storage.delete(key: _sessionKey);
     } catch (_) {
       await _wipe();
     }

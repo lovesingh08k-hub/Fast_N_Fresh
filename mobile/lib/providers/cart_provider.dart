@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../models/bill.dart';
+import '../services/order_service.dart';
 
 import '../models/cart_item.dart';
 import '../models/product.dart';
@@ -7,8 +12,82 @@ import '../models/customer.dart';
 class CartProvider extends ChangeNotifier {
   final Map<String, CartItem> _items = {};
 
+  /// Flat discount in ₹ (when [discountType] is 'flat').
   double discount = 0;
   String notes = '';
+
+  // ------------------------------------------------------------
+  // BILL ADJUSTMENTS (see backend services/billing.js)
+  // ------------------------------------------------------------
+
+  /// 'flat' = [discount] in ₹, 'percent' = [discountPercent] of the subtotal.
+  String discountType = 'flat';
+  double discountPercent = 0;
+  String discountReason = '';
+
+  /// Service charge on/off for this bill; null = the outlet's default.
+  bool? serviceChargeOn;
+
+  /// Delivery charge for this bill; null = the outlet's default.
+  double? deliveryChargeOverride;
+
+  /// The server's calculation of the current cart (GST, charges,
+  /// round-off). Refreshed automatically shortly after every change.
+  BillBreakdown? quote;
+  String? _quoteKey;
+  Timer? _quoteTimer;
+
+  /// Turned off in widget tests that have no server.
+  static bool autoQuote = true;
+
+  /// Adjustment fields sent with quote / bill / open-order requests.
+  Map<String, dynamic> get billAdjustments => {
+        'discountType': discountType,
+        'discountValue': discountType == 'percent' ? discountPercent : discount,
+        if (discountType == 'flat') 'discount': discount,
+        'discountReason': discountReason.trim(),
+        if (serviceChargeOn != null) 'serviceCharge': serviceChargeOn,
+        if (deliveryChargeOverride != null) 'deliveryCharge': deliveryChargeOverride,
+      };
+
+  String get _currentQuoteKey => [
+        orderType,
+        for (final i in _items.values) '${i.product.id}x${i.quantity}',
+        billAdjustments.toString(),
+      ].join('|');
+
+  /// Whether [quote] matches the cart as it is now.
+  bool get quoteIsCurrent => quote != null && _quoteKey == _currentQuoteKey;
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    _scheduleQuote();
+  }
+
+  void _scheduleQuote() {
+    if (!autoQuote || _items.isEmpty) return;
+    final key = _currentQuoteKey;
+    if (key == _quoteKey) return;
+    _quoteTimer?.cancel();
+    _quoteTimer = Timer(const Duration(milliseconds: 250), () => _fetchQuote(key));
+  }
+
+  Future<void> _fetchQuote(String key) async {
+    try {
+      final result = await OrderService().quote(
+        items: _items.values.toList(),
+        orderType: orderType,
+        adjust: billAdjustments,
+      );
+      if (key != _currentQuoteKey) return; // cart changed meanwhile
+      quote = result;
+      _quoteKey = key;
+      super.notifyListeners();
+    } catch (_) {
+      // Offline/server error: totals fall back to the local subtotal.
+    }
+  }
 
   Customer? selectedCustomer;
 
@@ -94,7 +173,11 @@ class CartProvider extends ChangeNotifier {
         (sum, item) => sum + item.lineTotal,
       );
 
-  double get grandTotal =>
+  /// Amount to pay: the server's calculation when it is current, otherwise
+  /// the local subtotal less a flat discount (no GST/charges).
+  double get grandTotal => quoteIsCurrent ? quote!.grandTotal : _localTotal;
+
+  double get _localTotal =>
       (subtotal - discount)
           .clamp(
             0,
@@ -225,9 +308,65 @@ class CartProvider extends ChangeNotifier {
   // DISCOUNT
   // ------------------------------------------------------------
 
+  void _resetAdjustments() {
+    discountType = 'flat';
+    discountPercent = 0;
+    discountReason = '';
+    serviceChargeOn = null;
+    deliveryChargeOverride = null;
+    quote = null;
+    _quoteKey = null;
+    _quoteTimer?.cancel();
+  }
+
+  void setPercentDiscount(double percent) {
+    discountType = 'percent';
+    discountPercent = percent.clamp(0, 100).toDouble();
+    discount = 0;
+    notifyListeners();
+  }
+
+  void setDiscountReason(String value) {
+    discountReason = value;
+    notifyListeners();
+  }
+
+  void setServiceCharge(bool? value) {
+    serviceChargeOn = value;
+    notifyListeners();
+  }
+
+  void setDeliveryCharge(double? value) {
+    deliveryChargeOverride = value;
+    notifyListeners();
+  }
+
+  void setItemNote(String productId, String note) {
+    final item = _items[productId];
+    if (item == null) return;
+    item.note = note;
+    notifyListeners();
+  }
+
+  /// Restores the discount/charge choices saved on an open order.
+  void restoreAdjustments(BillBreakdown bill, {bool? serviceCharge, double? deliveryCharge}) {
+    discountType = bill.discountType;
+    if (bill.discountType == 'percent') {
+      discountPercent = bill.discountValue;
+      discount = 0;
+    } else {
+      discount = bill.discount;
+    }
+    discountReason = bill.discountReason ?? '';
+    serviceChargeOn = serviceCharge;
+    deliveryChargeOverride = deliveryCharge;
+    notifyListeners();
+  }
+
   void setDiscount(
     double value,
   ) {
+    discountType = 'flat';
     discount =
         value < 0 ? 0 : value;
 
@@ -314,6 +453,7 @@ class CartProvider extends ChangeNotifier {
 
     discount = 0;
     notes = '';
+    _resetAdjustments();
 
     selectedCustomer = null;
 
@@ -335,6 +475,7 @@ class CartProvider extends ChangeNotifier {
 
     discount = 0;
     notes = '';
+    _resetAdjustments();
 
     selectedCustomer = null;
 

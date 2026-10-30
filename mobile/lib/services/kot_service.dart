@@ -75,7 +75,7 @@ class KotService {
             ),
             _line(chars, font),
             for (final item in order.items)
-              ..._itemLines(item.quantity, item.name, chars)
+              ..._itemLines(item.quantity, _kotName(item.name, item.note), chars)
                   .map((line) => _text(line, font, 8)),
             if (order.notes?.trim().isNotEmpty == true) ...[
               _line(chars, font),
@@ -159,7 +159,7 @@ class KotService {
             ),
             _line(chars, font),
             for (final item in ticket.items)
-              ..._itemLines(item.quantity, item.name, chars)
+              ..._itemLines(item.quantity, _kotName(item.name, item.note), chars)
                   .map((line) => _text(line, font, 8)),
             if (order.notes?.trim().isNotEmpty == true) ...[
               _line(chars, font),
@@ -206,7 +206,7 @@ class KotService {
     bytes += generator.text('${Formatters.shortDate(ticket.createdAt)}, ${Formatters.time(ticket.createdAt)}');
     bytes += generator.hr();
     for (final item in ticket.items) {
-      for (final line in _itemLines(item.quantity, item.name, chars)) {
+      for (final line in _itemLines(item.quantity, _kotName(item.name, item.note), chars)) {
         bytes += generator.text(line);
       }
     }
@@ -282,7 +282,7 @@ class KotService {
     bytes += generator.hr();
 
     for (final item in order.items) {
-      for (final line in _itemLines(item.quantity, item.name, chars)) {
+      for (final line in _itemLines(item.quantity, _kotName(item.name, item.note), chars)) {
         bytes += generator.text(line);
       }
     }
@@ -336,6 +336,10 @@ class KotService {
     if (width <= 1) return cleaned.substring(0, width);
     return '${cleaned.substring(0, width - 3)}...';
   }
+
+  /// Item name with its kitchen note, e.g. "Paneer Tikka (less spicy)".
+  static String _kotName(String name, String? note) =>
+      note == null || note.trim().isEmpty ? name : '$name (${note.trim()})';
 
   /// "QTY  ITEM" rows with the full item name: long names wrap onto
   /// following lines (indented under ITEM) instead of being cut with "...".

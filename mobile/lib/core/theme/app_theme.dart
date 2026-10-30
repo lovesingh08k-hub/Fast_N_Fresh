@@ -7,16 +7,19 @@ class AppTheme {
 
   static ThemeData _build(Brightness brightness) {
     final dark = brightness == Brightness.dark;
-    final primary = dark ? const Color(0xFF63C6A4) : const Color(0xFF176B52);
-    final primaryLight = dark ? const Color(0xFF173A31) : const Color(0xFFE7F3EE);
-    final background = dark ? const Color(0xFF101312) : const Color(0xFFF7F8F6);
-    final surface = dark ? const Color(0xFF181C1A) : Colors.white;
-    final surfaceElevated = dark ? const Color(0xFF202522) : Colors.white;
-    final textPrimary = dark ? const Color(0xFFF1F4F2) : const Color(0xFF1C211F);
-    final textSecondary = dark ? const Color(0xFFB3BCB8) : const Color(0xFF66706B);
-    final textMuted = dark ? const Color(0xFF7F8A85) : const Color(0xFF929A96);
-    final border = dark ? const Color(0xFF2A322E) : const Color(0xFFE1E5E2);
-    final divider = dark ? const Color(0xFF252B28) : const Color(0xFFEAEEEB);
+    // Same palette as AppColors (light / dark).
+    final primary = dark ? const Color(0xFFFF8A65) : const Color(0xFFF2643D);
+    final primaryLight = dark ? const Color(0xFF3A2219) : const Color(0xFFFFEDE7);
+    final background = dark ? const Color(0xFF0F1012) : const Color(0xFFF4F4F6);
+    final surface = dark ? const Color(0xFF1A1B1F) : Colors.white;
+    final surfaceElevated = dark ? const Color(0xFF232429) : Colors.white;
+    final textPrimary = dark ? const Color(0xFFF3F3F5) : const Color(0xFF1B1D22);
+    final textSecondary = dark ? const Color(0xFFB4B6BE) : const Color(0xFF6B6F7A);
+    final textMuted = dark ? const Color(0xFF7D808A) : const Color(0xFF9CA0AA);
+    final border = dark ? const Color(0xFF2C2D33) : const Color(0xFFEBEBEF);
+    final divider = dark ? const Color(0xFF26272C) : const Color(0xFFF0F0F3);
+    // A shade darker than the page so fields stay visible on grey and white.
+    final field = dark ? const Color(0xFF26272D) : const Color(0xFFEBEBF0);
 
     final base = ThemeData(
       useMaterial3: true,
@@ -30,19 +33,19 @@ class AppTheme {
         error: AppColors.danger,
       ),
       scaffoldBackgroundColor: background,
-      fontFamily: GoogleFonts.inter().fontFamily,
+      fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
       // Compact density keeps list tiles, buttons and fields tight for a
       // minimal, information-dense POS.
       visualDensity: VisualDensity.compact,
     );
 
-    final text = GoogleFonts.interTextTheme(base.textTheme).copyWith(
-      headlineSmall: GoogleFonts.inter(fontSize: 19, fontWeight: FontWeight.w700, color: textPrimary),
-      titleLarge: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: textPrimary),
-      titleMedium: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
-      bodyLarge: GoogleFonts.inter(fontSize: 15, color: textPrimary),
-      bodyMedium: GoogleFonts.inter(fontSize: 13, color: textSecondary),
-      labelLarge: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+    final text = GoogleFonts.plusJakartaSansTextTheme(base.textTheme).copyWith(
+      headlineSmall: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: textPrimary),
+      titleLarge: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary),
+      titleMedium: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w700, color: textPrimary),
+      bodyLarge: GoogleFonts.plusJakartaSans(fontSize: 15, color: textPrimary),
+      bodyMedium: GoogleFonts.plusJakartaSans(fontSize: 13, color: textSecondary),
+      labelLarge: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600),
     );
 
     // Keep one Flutter-SDK-compatible transition builder across platforms.
@@ -63,54 +66,92 @@ class AppTheme {
         backgroundColor: background,
         foregroundColor: textPrimary,
         elevation: 0,
-        centerTitle: false,
-        toolbarHeight: 52,
-        titleTextStyle: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w600, color: textPrimary),
+        centerTitle: true,
+        toolbarHeight: 56,
+        titleTextStyle: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w700, color: textPrimary),
         surfaceTintColor: Colors.transparent,
       ),
       cardTheme: CardThemeData(
         color: surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           side: BorderSide(color: border, width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
+        shape: const CircleBorder(),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: primary,
+          selectedForegroundColor: Colors.white,
+          side: BorderSide(color: border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : null),
+        trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? primary : null),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: dark ? const Color(0xFF0D1814) : Colors.white,
+          foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
           side: BorderSide(color: border),
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primary,
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
+        // Soft grey filled fields without a heavy outline.
         filled: true,
-        fillColor: surface,
+        fillColor: field,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: border)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: border)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: primary, width: 1.5)),
-        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide(color: AppColors.danger)),
-        hintStyle: GoogleFonts.inter(color: textMuted, fontSize: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: field)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: field)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: primary, width: 1.5)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: AppColors.danger)),
+        prefixIconColor: textMuted,
+        hintStyle: GoogleFonts.plusJakartaSans(color: textMuted, fontSize: 14),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: surface,
@@ -124,20 +165,22 @@ class AppTheme {
         backgroundColor: surface,
         indicatorColor: primaryLight,
         labelTextStyle: WidgetStatePropertyAll(
-          GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
+          GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600),
         ),
       ),
       dividerTheme: DividerThemeData(color: divider, thickness: 1, space: 1),
       chipTheme: base.chipTheme.copyWith(
-        backgroundColor: background,
+        backgroundColor: surface,
         selectedColor: primaryLight,
-        labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        checkmarkColor: primary,
+        labelStyle: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         side: BorderSide(color: border),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: dark ? surfaceElevated : textPrimary,
-        contentTextStyle: GoogleFonts.inter(color: dark ? textPrimary : Colors.white, fontSize: 14),
+        contentTextStyle: GoogleFonts.plusJakartaSans(color: dark ? textPrimary : Colors.white, fontSize: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         behavior: SnackBarBehavior.floating,
         // Swipe left/right to dismiss, like native Android snackbars.

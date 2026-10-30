@@ -9,6 +9,7 @@ import 'network_status.dart';
 import 'token_storage.dart';
 
 typedef OnUnauthorized = void Function();
+typedef OnLicenceInactive = void Function(String message);
 
 class DioClient {
   DioClient._internal();
@@ -18,6 +19,14 @@ class DioClient {
   late final Dio dio = _build();
 
   OnUnauthorized? onUnauthorized;
+
+  /// Called when the server refuses the request because the client's
+  /// subscription is suspended/expired (HTTP 402, LICENCE_INACTIVE).
+  OnLicenceInactive? onLicenceInactive;
+
+  /// Outlet the app works in, sent with every request (multi-outlet
+  /// businesses). Null on a single-outlet / single-cafe server.
+  String? outletCode;
 
   // ---------------------------------------------------------------------
   // RETRY CONFIGURATION
@@ -77,6 +86,11 @@ class DioClient {
             options.extra['hadAuthToken'] = false;
           }
 
+          final outlet = outletCode;
+          if (outlet != null && outlet.isNotEmpty) {
+            options.headers['X-Outlet-Id'] = outlet;
+          }
+
           handler.next(options);
         },
         onError: (DioException e, handler) {
@@ -105,6 +119,7 @@ class DioClient {
     // a no-op unless the response actually is a 401, so it is safe to
     // check up front regardless of what happens next.
     _checkUnauthorized(err);
+    _checkLicence(err);
 
     final options = err.requestOptions;
     final attemptSoFar = (options.extra['retryAttempt'] as int?) ?? 0;
@@ -146,6 +161,17 @@ class DioClient {
       handler.next(retryError);
     } catch (_) {
       handler.next(err);
+    }
+  }
+
+  void _checkLicence(DioException e) {
+    final response = e.response;
+    if (response?.statusCode != 402) return;
+    final data = response?.data;
+    final details = data is Map ? data['details'] : null;
+    if (details is Map && details['code'] == 'LICENCE_INACTIVE') {
+      final message = data['message']?.toString() ?? 'Your subscription is not active.';
+      onLicenceInactive?.call(message);
     }
   }
 

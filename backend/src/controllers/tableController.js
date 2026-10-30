@@ -1,5 +1,7 @@
 const QRCode = require('qrcode');
 const { Table, Order } = require('../models');
+const { currentContext } = require('../tenancy/context');
+const { outletKey } = require('../tenancy/resolver');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 const { publicMenuUrl } = require('../utils/publicUrls');
 
@@ -75,7 +77,7 @@ const getTable = asyncHandler(async (req, res) => {
 });
 
 const createTable = asyncHandler(async (req, res) => {
-  const { name, capacity, number } = req.body;
+  const { name, capacity, number, area } = req.body;
   if (typeof name !== 'string' || !name.trim()) throw new ApiError(400, 'Table name/number is required.');
 
   let qrNumber = number;
@@ -90,7 +92,7 @@ const createTable = asyncHandler(async (req, res) => {
     qrNumber = await deriveNumberFromName(name);
   }
 
-  const table = await Table.create({ name: name.trim(), capacity: capacity || 4, number: qrNumber || undefined });
+  const table = await Table.create({ name: name.trim(), capacity: capacity || 4, number: qrNumber || undefined, area: String(area || '').trim() });
   res.status(201).json({ success: true, data: table });
 });
 
@@ -98,9 +100,10 @@ const updateTable = asyncHandler(async (req, res) => {
   const table = await Table.findOne({ _id: req.params.id, active: true });
   if (!table) throw new ApiError(404, 'Table not found.');
 
-  const { name, capacity, status, number } = req.body;
+  const { name, capacity, status, number, area } = req.body;
   if (name !== undefined) table.name = String(name).trim();
   if (capacity !== undefined) table.capacity = capacity;
+  if (area !== undefined) table.area = String(area || '').trim();
   if (number !== undefined) {
     if (number === null || number === '') {
       table.number = undefined;
@@ -179,7 +182,7 @@ const getTableQr = asyncHandler(async (req, res) => {
 
   let url;
   try {
-    url = publicMenuUrl(table.number);
+    url = publicMenuUrl(table.number, outletKey(currentContext()));
   } catch (err) {
     throw new ApiError(500, err.message);
   }

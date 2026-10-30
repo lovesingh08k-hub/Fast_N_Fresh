@@ -29,9 +29,9 @@ class TableService {
     }
   }
 
-  Future<CafeTable> create({required String name, int capacity = 4}) async {
+  Future<CafeTable> create({required String name, int capacity = 4, String area = ''}) async {
     try {
-      final res = await _dio.post('/tables', data: {'name': name, 'capacity': capacity});
+      final res = await _dio.post('/tables', data: {'name': name, 'capacity': capacity, if (area.trim().isNotEmpty) 'area': area.trim()});
       return CafeTable.fromJson(res.data['data'] as Map<String, dynamic>);
     } catch (e) {
       throw DioClient.instance.mapError(e);

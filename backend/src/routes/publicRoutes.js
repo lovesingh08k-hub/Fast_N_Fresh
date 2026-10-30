@@ -10,6 +10,7 @@ const {
 const { publicMenuLimiter, publicOrderLimiter } = require('../middleware/rateLimiters');
 const { createPublicPayment, getPublicPaymentStatus, cancelPublicPayment } = require('../controllers/paymentController');
 const { paymentWebhook } = require('../controllers/paymentWebhookController');
+const { withPublicOutlet } = require('../middleware/publicContext');
 
 const router = express.Router();
 
@@ -33,6 +34,9 @@ router.get('/app-update', (req, res) => {
     forceUpdate,
   });
 });
+
+// Everything below works on the outlet named in the link (see publicContext).
+router.use(withPublicOutlet);
 
 // Intentionally NOT behind `protect` — this is the customer-facing surface.
 // Every handler here only ever reads customer-safe data or writes a new,

@@ -11,6 +11,13 @@ class Product {
   final String status; // 'available' | 'unavailable'
   final String imageUrl;
 
+  /// GST rate of this item (%); null = the outlet's default rate.
+  final double? taxRate;
+
+  /// Short menu description, and the Indian veg / non_veg / egg mark ('' = none).
+  final String description;
+  final String foodType;
+
   Product({
     required this.id,
     required this.name,
@@ -23,6 +30,9 @@ class Product {
     this.lowStockThreshold = 10,
     this.status = 'available',
     this.imageUrl = '',
+    this.taxRate,
+    this.description = '',
+    this.foodType = '',
   });
 
   bool get hasImage => imageUrl.isNotEmpty;
@@ -63,6 +73,9 @@ class Product {
       lowStockThreshold: (json['lowStockThreshold'] as num?)?.toInt() ?? 10,
       status: json['status'] is String ? json['status'] as String : 'available',
       imageUrl: json['imageUrl'] is String ? json['imageUrl'] as String : '',
+      taxRate: (json['taxRate'] as num?)?.toDouble(),
+      description: json['description'] is String ? json['description'] as String : '',
+      foodType: json['foodType'] is String ? json['foodType'] as String : '',
     );
   }
 }

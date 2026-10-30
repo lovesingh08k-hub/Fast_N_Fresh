@@ -9,6 +9,9 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, enum: ['admin', 'manager', 'staff'], required: true, default: 'staff' },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    // Outlet codes this user may work in (franchise clients). Empty = all
+    // outlets; admins always see all.
+    outlets: { type: [String], default: [] },
     lastLoginAt: { type: Date },
     tokenVersion: { type: Number, default: 0 }, // bump to invalidate all issued tokens (logout all devices)
     fcmTokens: { type: [String], default: undefined }, // Firebase Cloud Messaging device tokens, for push notifications reaching this user even while the app is fully closed

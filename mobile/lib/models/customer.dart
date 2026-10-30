@@ -7,6 +7,7 @@ class Customer {
   final double totalPurchases;
   final double totalPaid;
   final double outstandingBalance;
+  final DateTime? createdAt;
 
   Customer({
     required this.id,
@@ -17,6 +18,7 @@ class Customer {
     this.totalPurchases = 0,
     this.totalPaid = 0,
     this.outstandingBalance = 0,
+    this.createdAt,
   });
 
   bool get hasDue => outstandingBalance > 0;
@@ -31,6 +33,7 @@ class Customer {
       totalPurchases: (json['totalPurchases'] as num?)?.toDouble() ?? 0,
       totalPaid: (json['totalPaid'] as num?)?.toDouble() ?? 0,
       outstandingBalance: (json['outstandingBalance'] as num?)?.toDouble() ?? 0,
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
     );
   }
 }

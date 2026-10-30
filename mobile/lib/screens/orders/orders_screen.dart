@@ -8,6 +8,8 @@ import '../../app.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/widgets/fresh_ui.dart';
+import '../../core/widgets/pos_ui.dart';
+import '../../core/utils/formatters.dart';
 import '../../core/widgets/state_widgets.dart';
 import '../../models/order.dart';
 import '../../models/table.dart';
@@ -20,6 +22,7 @@ import '../../services/notification_service.dart';
 import '../../services/order_service.dart';
 
 import '../pos/counter_slots_screen.dart';
+import 'open_bill.dart';
 import 'order_detail_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -39,6 +42,9 @@ class _OrdersScreenState extends State<OrdersScreen>
   List<Order>? _orders;
   List<CafeTable> _tables = [];
   String _channelTab = 'All';
+
+  /// 'progress' (being prepared), 'payment' (served, not yet paid) or 'tables'.
+  String _view = 'progress';
   bool _showSearch = false;
   final TextEditingController _searchController = TextEditingController();
 
@@ -459,7 +465,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       case 'Billing':
         return FreshUi.amber;
       default:
-        return FreshUi.mint;
+        return tab == 'Available' ? FreshUi.green : FreshUi.mint;
     }
   }
 
@@ -558,103 +564,271 @@ class _OrdersScreenState extends State<OrdersScreen>
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 96),
       children: [
         _buildHeader(),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(2, 12, 2, 10),
-          child: Row(
-            children: [
-              const Icon(Icons.table_restaurant_outlined,
-                  color: FreshUi.mint, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text.rich(
-                  TextSpan(children: [
-                    TextSpan(
-                        text: '${_countFor('Occupied')}',
-                        style: const TextStyle(
-                            color: FreshUi.amber, fontWeight: FontWeight.w800)),
-                    const TextSpan(text: ' occupied  •  '),
-                    TextSpan(
-                        text: '${_countFor('Available')}',
-                        style: const TextStyle(
-                            color: FreshUi.mint, fontWeight: FontWeight.w800)),
-                    const TextSpan(text: ' available'),
-                  ]),
-                  style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500),
+        const SizedBox(height: 14),
+        _viewSwitcher(),
+        const SizedBox(height: 14),
+        if (_view != 'tables')
+          ..._runningList()
+        else ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 12, 2, 10),
+            child: Row(
+              children: [
+                const Icon(Icons.table_restaurant_outlined,
+                    color: FreshUi.mint, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(
+                          text: '${_countFor('Occupied')}',
+                          style: const TextStyle(
+                              color: FreshUi.amber, fontWeight: FontWeight.w800)),
+                      const TextSpan(text: ' occupied  •  '),
+                      TextSpan(
+                          text: '${_countFor('Available')}',
+                          style: const TextStyle(
+                              color: FreshUi.green, fontWeight: FontWeight.w800)),
+                      const TextSpan(text: ' available'),
+                    ]),
+                    style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+                if (_isRefreshing)
+                  const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+              ],
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ['All', 'Occupied', 'Available', 'Billing']
+                  .map(_tabPill)
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: InlineRetryBanner(
+                  message: 'Could not refresh. Showing the last loaded data.',
+                  onRetry: _load),
+            ),
+          if (tables.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 80),
+              child: Center(
+                child: Text(
+                  query.isEmpty
+                      ? 'No tables found.'
+                      : 'No matching tables found.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 16),
                 ),
               ),
-              if (_isRefreshing)
-                const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 760 ? 3 : 2;
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: tables.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    mainAxisExtent: 206,
+                  ),
+                  itemBuilder: (_, index) => _OrderTableCard(
+                    table: tables[index],
+                    order: _tableOrder(tables[index]),
+                    canManageQr: context
+                            .read<AuthProvider>()
+                            .currentUser
+                            ?.canManageTables ??
+                        false,
+                    onOpen: () => _openOrderTable(tables[index]),
+                    onQr: () => _openTableQr(tables[index]),
+                  ),
+                );
+              },
+            ),
+          const SizedBox(height: 18),
+          CountersPanel(key: _takeawayKey, orderType: 'takeaway'),
+          const SizedBox(height: 18),
+          CountersPanel(key: _deliveryKey, orderType: 'delivery'),
+        ],
+      ],
+    );
+  }
+
+  /// Unbilled orders split into "being prepared" and "waiting for payment".
+  bool _isInProgress(Order order) {
+    if (order.isQrOrder) return order.status == 'open' || order.status == 'preparing';
+    return order.kots.any((k) => k.status == 'new' || k.status == 'preparing');
+  }
+
+  List<Order> get _running {
+    final query = _searchController.text.trim().toLowerCase();
+    return (_orders ?? const <Order>[])
+        .where((o) => o.status != 'completed' && o.status != 'voided' && o.paymentStatus != 'paid')
+        .where((o) => _view == 'progress' ? _isInProgress(o) : !_isInProgress(o))
+        .where((o) =>
+            query.isEmpty ||
+            (o.printCustomerName ?? '').toLowerCase().contains(query) ||
+            (o.tableName ?? '').toLowerCase().contains(query) ||
+            '${o.orderNumber}'.contains(query))
+        .toList();
+  }
+
+  int _runningCount(bool inProgress) => (_orders ?? const <Order>[])
+      .where((o) => o.status != 'completed' && o.status != 'voided' && o.paymentStatus != 'paid')
+      .where((o) => _isInProgress(o) == inProgress)
+      .length;
+
+  Widget _viewSwitcher() {
+    final views = [
+      ('progress', 'In Progress', _runningCount(true)),
+      ('payment', 'Waiting Payment', _runningCount(false)),
+      ('tables', 'Tables', null),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border)),
+      child: Row(
+        children: [
+          for (final v in views)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _view = v.$1),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _view == v.$1 ? AppColors.primaryLight : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      v.$3 == null ? v.$2 : '${v.$2} (${v.$3})',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: _view == v.$1 ? FontWeight.w800 : FontWeight.w600,
+                        color: _view == v.$1 ? AppColors.primary : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Short code for the badge: table number, counter (T1/D2) or bill no.
+  String _codeFor(Order o) {
+    final label = o.tableCustomerLabel?.trim() ?? '';
+    final slot = RegExp(r'^([TD]\d+)').firstMatch(label);
+    if (o.orderType != 'dine_in' && slot != null) return slot.group(1)!;
+    if (o.tableNumber != null) return 'T${o.tableNumber}';
+    final name = o.tableName?.trim() ?? '';
+    final digits = RegExp(r'\d+').firstMatch(name)?.group(0);
+    if (name.isNotEmpty) return '${name[0].toUpperCase()}${digits ?? ''}';
+    return '#${o.orderNumber}';
+  }
+
+  List<Widget> _runningList() {
+    final orders = _running;
+    if (orders.isEmpty) {
+      return [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+          decoration: FreshUi.card(),
+          child: Column(
+            children: [
+              Text(_view == 'progress' ? '👨‍🍳' : '🧾', style: const TextStyle(fontSize: 44)),
+              const SizedBox(height: 10),
+              Text(
+                _view == 'progress' ? 'Nothing cooking right now' : 'No bills waiting for payment',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text('Orders sent to the kitchen show up here.', style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
             ],
           ),
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: ['All', 'Occupied', 'Available', 'Billing']
-                .map(_tabPill)
-                .toList(),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: InlineRetryBanner(
-                message: 'Could not refresh. Showing the last loaded data.',
-                onRetry: _load),
-          ),
-        if (tables.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 80),
-            child: Center(
-              child: Text(
-                query.isEmpty
-                    ? 'No tables found.'
-                    : 'No matching tables found.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 16),
+      ];
+    }
+    return [
+      for (final o in orders)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () async {
+                await openBill(context, o);
+                if (mounted) _load();
+              },
+              child: Ink(
+                padding: const EdgeInsets.all(12),
+                decoration: FreshUi.card(),
+                child: Row(
+                  children: [
+                    CodeBadge(code: _codeFor(o), color: AppColors.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            o.printCustomerName ?? (o.tableName ?? 'Bill #${o.orderNumber}'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: AppColors.textPrimary),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${o.items.fold<int>(0, (n, i) => n + i.quantity)} items · ${o.orderType == 'dine_in' ? 'Dine-in' : o.orderType == 'delivery' ? 'Delivery' : 'Takeaway'} · #${o.orderNumber}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _isInProgress(o)
+                            ? StatusPill(label: 'In Progress', color: AppColors.warning, icon: Icons.timelapse_rounded)
+                            : StatusPill(label: 'Ready', color: AppColors.success, icon: Icons.done_all_rounded),
+                        const SizedBox(height: 6),
+                        Text(
+                          _isInProgress(o) ? 'Cooking now' : 'Collect ${Formatters.currency(o.grandTotal)}',
+                          style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          )
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 760 ? 3 : 2;
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: tables.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  mainAxisExtent: 206,
-                ),
-                itemBuilder: (_, index) => _OrderTableCard(
-                  table: tables[index],
-                  order: _tableOrder(tables[index]),
-                  canManageQr: context
-                          .read<AuthProvider>()
-                          .currentUser
-                          ?.canManageTables ??
-                      false,
-                  onOpen: () => _openOrderTable(tables[index]),
-                  onQr: () => _openTableQr(tables[index]),
-                ),
-              );
-            },
           ),
-        const SizedBox(height: 18),
-        CountersPanel(key: _takeawayKey, orderType: 'takeaway'),
-        const SizedBox(height: 18),
-        CountersPanel(key: _deliveryKey, orderType: 'delivery'),
-      ],
-    );
+        ),
+    ];
   }
 
   int _countFor(String tab) {
@@ -737,7 +911,7 @@ class _OrderTableCard extends StatelessWidget {
       case 'Reserved':
         return FreshUi.amber;
       default:
-        return FreshUi.mint;
+        return FreshUi.green;
     }
   }
 

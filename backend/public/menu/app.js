@@ -199,6 +199,17 @@
     showState('errorState');
   }
 
+  // Outlet of a multi-outlet business ("<businessCode>:<outletCode>"),
+  // taken from the QR link; sent with every API call.
+  const OUTLET_KEY =
+    new URLSearchParams(window.location.search).get('o') || '';
+
+  function withOutlet(path) {
+    if (!OUTLET_KEY) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return path + sep + 'o=' + encodeURIComponent(OUTLET_KEY);
+  }
+
   async function apiRequest(path, options = {}) {
     if (
       !API_BASE_URL ||
@@ -223,7 +234,7 @@
 
     try {
       response = await fetch(
-        API_BASE_URL + path,
+        API_BASE_URL + withOutlet(path),
         {
           headers: {
             'Content-Type': 'application/json',

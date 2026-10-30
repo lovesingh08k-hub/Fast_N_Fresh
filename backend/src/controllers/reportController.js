@@ -1,4 +1,4 @@
-const { Order, Customer, Expense, User } = require('../models');
+const { Order, Customer, Expense, User, RefundTransaction } = require('../models');
 const { asyncHandler } = require('../utils/apiError');
 const { parseClientDate } = require('../utils/dateRanges');
 
@@ -25,6 +25,12 @@ const getSalesReport = asyncHandler(async (req, res) => {
   const cash = orders.reduce((s, o) => s + (o.paymentBreakdown?.cash || 0), 0);
   const upi = orders.reduce((s, o) => s + (o.paymentBreakdown?.upi || 0), 0);
   const credit = orders.reduce((s, o) => s + (o.paymentBreakdown?.credit || 0), 0);
+  const card = orders.reduce((s, o) => s + (o.paymentBreakdown?.card || 0), 0);
+  const online = orders.reduce((s, o) => s + (o.paymentBreakdown?.online || 0), 0);
+  const discount = orders.reduce((s, o) => s + (o.discount || 0), 0);
+  const tax = orders.reduce((s, o) => s + (o.tax || 0), 0);
+  const serviceCharge = orders.reduce((s, o) => s + (o.serviceCharge || 0), 0);
+  const complimentary = orders.filter((o) => o.complimentary || o.paymentMethod === 'COMPLIMENTARY');
 
   const byType = { dine_in: 0, takeaway: 0, delivery: 0 };
   const byTypeCount = { dine_in: 0, takeaway: 0, delivery: 0 };
@@ -43,6 +49,13 @@ const getSalesReport = asyncHandler(async (req, res) => {
       cash: round2(cash),
       upi: round2(upi),
       credit: round2(credit),
+      card: round2(card),
+      online: round2(online),
+      discount: round2(discount),
+      tax: round2(tax),
+      serviceCharge: round2(serviceCharge),
+      complimentaryOrders: complimentary.length,
+      complimentaryValue: round2(complimentary.reduce((s, o) => s + (o.subtotal || 0), 0)),
       dineInSales: byType.dine_in,
       takeawaySales: byType.takeaway,
       deliverySales: byType.delivery,
@@ -149,4 +162,145 @@ const getExpenseReport = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getSalesReport, getProductReport, getStaffReport, getCreditReport, getExpenseReport };
+// GET /api/reports/tax?from=&to=
+// GST summary for filing: taxable value and CGST/SGST/IGST per rate.
+const getTaxReport = asyncHandler(async (req, res) => {
+  const filter = parseRange(req.query);
+  const [rates, totals] = await Promise.all([
+    Order.aggregate([
+      { $match: filter },
+      { $unwind: '$taxes' },
+      {
+        $group: {
+          _id: '$taxes.rate',
+          taxable: { $sum: '$taxes.taxable' },
+          cgst: { $sum: '$taxes.cgst' },
+          sgst: { $sum: '$taxes.sgst' },
+          igst: { $sum: '$taxes.igst' },
+          tax: { $sum: '$taxes.tax' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    Order.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          bills: { $sum: 1 },
+          subtotal: { $sum: '$subtotal' },
+          discount: { $sum: '$discount' },
+          serviceCharge: { $sum: '$serviceCharge' },
+          packagingCharge: { $sum: '$packagingCharge' },
+          deliveryCharge: { $sum: '$deliveryCharge' },
+          tax: { $sum: '$tax' },
+          roundOff: { $sum: '$roundOff' },
+          netSales: { $sum: '$grandTotal' },
+          firstInvoice: { $min: '$invoiceNumber' },
+          lastInvoice: { $max: '$invoiceNumber' },
+        },
+      },
+    ]),
+  ]);
+  const t = totals[0] || {};
+  res.json({
+    success: true,
+    data: {
+      rates: rates.map((r) => ({
+        rate: r._id, taxable: round2(r.taxable), cgst: round2(r.cgst), sgst: round2(r.sgst), igst: round2(r.igst), tax: round2(r.tax),
+      })),
+      bills: t.bills || 0,
+      subtotal: round2(t.subtotal || 0),
+      discount: round2(t.discount || 0),
+      serviceCharge: round2(t.serviceCharge || 0),
+      packagingCharge: round2(t.packagingCharge || 0),
+      deliveryCharge: round2(t.deliveryCharge || 0),
+      tax: round2(t.tax || 0),
+      roundOff: round2(t.roundOff || 0),
+      netSales: round2(t.netSales || 0),
+      firstInvoice: t.firstInvoice || null,
+      lastInvoice: t.lastInvoice || null,
+    },
+  });
+});
+
+// GET /api/reports/day-end?date=YYYY-MM-DD
+// Day-end (Z) report: everything a cashier closes the day with.
+const getDayEndReport = asyncHandler(async (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || ''))
+    ? String(req.query.date)
+    : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const start = new Date(`${date}T00:00:00+05:30`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const range = { $gte: start, $lt: end };
+
+  const [all, expenses, refunds] = await Promise.all([
+    Order.find({ createdAt: range, preLaunchTestData: { $ne: true } }).lean(),
+    Expense.find({ date: range }).lean(),
+    RefundTransaction.find({ processedAt: range }).lean(),
+  ]);
+  const done = all.filter((o) => o.status === 'completed');
+  const sum = (list, pick) => round2(list.reduce((s, o) => s + (Number(pick(o)) || 0), 0));
+
+  const taxByRate = new Map();
+  for (const o of done) {
+    for (const t of o.taxes || []) {
+      const row = taxByRate.get(t.rate) || { rate: t.rate, taxable: 0, cgst: 0, sgst: 0, igst: 0, tax: 0 };
+      for (const k of ['taxable', 'cgst', 'sgst', 'igst', 'tax']) row[k] = round2(row[k] + (t[k] || 0));
+      taxByRate.set(t.rate, row);
+    }
+  }
+  const items = new Map();
+  for (const o of done) {
+    for (const i of o.items || []) {
+      const row = items.get(i.name) || { name: i.name, quantity: 0, amount: 0 };
+      row.quantity += i.quantity;
+      row.amount = round2(row.amount + (i.total || 0));
+      items.set(i.name, row);
+    }
+  }
+  const invoices = done.map((o) => o.invoiceNumber).filter(Boolean).sort();
+
+  res.json({
+    success: true,
+    data: {
+      date,
+      bills: done.length,
+      cancelled: all.filter((o) => o.status === 'voided').length,
+      openBills: all.filter((o) => ['open', 'preparing', 'ready'].includes(o.status)).length,
+      firstInvoice: invoices[0] || null,
+      lastInvoice: invoices[invoices.length - 1] || null,
+      subtotal: sum(done, (o) => o.subtotal),
+      discount: sum(done, (o) => o.discount),
+      serviceCharge: sum(done, (o) => o.serviceCharge),
+      packagingCharge: sum(done, (o) => o.packagingCharge),
+      deliveryCharge: sum(done, (o) => o.deliveryCharge),
+      tax: sum(done, (o) => o.tax),
+      roundOff: sum(done, (o) => o.roundOff),
+      netSales: sum(done, (o) => o.grandTotal),
+      taxes: [...taxByRate.values()].sort((a, b) => a.rate - b.rate),
+      payments: {
+        cash: sum(done, (o) => o.paymentBreakdown?.cash),
+        upi: sum(done, (o) => o.paymentBreakdown?.upi),
+        card: sum(done, (o) => o.paymentBreakdown?.card),
+        online: sum(done, (o) => o.paymentBreakdown?.online),
+        credit: sum(done, (o) => o.paymentBreakdown?.credit),
+      },
+      byType: {
+        dine_in: sum(done.filter((o) => o.orderType === 'dine_in'), (o) => o.grandTotal),
+        takeaway: sum(done.filter((o) => o.orderType === 'takeaway'), (o) => o.grandTotal),
+        delivery: sum(done.filter((o) => o.orderType === 'delivery'), (o) => o.grandTotal),
+      },
+      complimentary: {
+        bills: done.filter((o) => o.complimentary).length,
+        value: sum(done.filter((o) => o.complimentary), (o) => o.subtotal),
+      },
+      refunds: sum(refunds, (r) => r.amount),
+      expenses: sum(expenses, (e) => e.amount),
+      cashExpenses: sum(expenses.filter((e) => e.paymentMethod === 'CASH'), (e) => e.amount),
+      topItems: [...items.values()].sort((a, b) => b.amount - a.amount).slice(0, 15),
+    },
+  });
+});
+
+module.exports = { getSalesReport, getProductReport, getStaffReport, getCreditReport, getExpenseReport, getTaxReport, getDayEndReport };

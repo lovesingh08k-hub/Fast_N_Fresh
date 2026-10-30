@@ -140,6 +140,11 @@ class DashboardData {
   final List<RecentOrderSummary> recentOrders;
   final List<TopProduct> topSellingProducts;
 
+  /// Unbilled orders right now (tables, counters, QR) and their value.
+  final int runningOrders;
+  final double runningValue;
+  final int readyOrders;
+
   DashboardData({
     required this.today,
     required this.lowStockCount,
@@ -147,10 +152,14 @@ class DashboardData {
     required this.outstandingCreditCustomerCount,
     required this.recentOrders,
     required this.topSellingProducts,
+    this.runningOrders = 0,
+    this.runningValue = 0,
+    this.readyOrders = 0,
   });
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     final outstanding = json['outstandingCredit'] as Map<String, dynamic>? ?? {};
+    final running = json['running'] as Map<String, dynamic>? ?? {};
     return DashboardData(
       today: PeriodSummary.fromJson(json['today'] as Map<String, dynamic>? ?? {}),
       lowStockCount: (json['lowStockCount'] as num?)?.toInt() ?? 0,
@@ -161,6 +170,9 @@ class DashboardData {
           .toList(),
       topSellingProducts:
           (json['topSellingProducts'] as List<dynamic>? ?? []).map((e) => TopProduct.fromJson(e as Map<String, dynamic>)).toList(),
+      runningOrders: (running['count'] as num?)?.toInt() ?? 0,
+      runningValue: (running['value'] as num?)?.toDouble() ?? 0,
+      readyOrders: (running['ready'] as num?)?.toInt() ?? 0,
     );
   }
 }

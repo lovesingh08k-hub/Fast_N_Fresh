@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { startSession } = require('../tenancy/context');
 const { Product, InventoryTransaction } = require('../models');
 const { ApiError, asyncHandler } = require('../utils/apiError');
 
@@ -46,7 +47,7 @@ const adjustInventory = asyncHandler(async (req, res) => {
   else if (type === 'STOCK_OUT') signedQty = -Math.abs(qty);
   else signedQty = qty; // ADJUSTMENT can be positive or negative directly (set delta)
 
-  const session = await mongoose.startSession();
+  const session = await startSession();
   let updatedProduct;
   let transaction;
 

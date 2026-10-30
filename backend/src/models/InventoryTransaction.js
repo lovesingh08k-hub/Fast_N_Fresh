@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const userRef = require('./userRef');
 
 const inventoryTransactionSchema = new mongoose.Schema(
   {
@@ -8,7 +9,7 @@ const inventoryTransactionSchema = new mongoose.Schema(
     stockAfter: { type: Number, required: true },
     reason: { type: String, trim: true },
     order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
-    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // null for verified customer QR system events
+    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: userRef }, // null for verified customer QR system events
   },
   { timestamps: true }
 );
