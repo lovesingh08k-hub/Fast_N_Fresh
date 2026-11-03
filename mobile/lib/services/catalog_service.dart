@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
+import '../core/offline/offline_engine.dart';
 import '../core/utils/pos_debug_log.dart';
 import '../models/product.dart';
 import '../models/category.dart';
@@ -64,6 +65,19 @@ class ProductService {
     }
   }
 
+  /// The menu as last seen on this device.
+  List<Product> listCached() {
+    final parsed = <Product>[];
+    for (final row in OfflineEngine.instance.cachedCatalog) {
+      try {
+        parsed.add(Product.fromJson(row));
+      } catch (_) {
+        // A row that cannot be read just waits for the fresh menu.
+      }
+    }
+    return parsed;
+  }
+
   Future<Product> create(Map<String, dynamic> body) async {
     try {
       final res = await _dio.post('/products', data: body);
@@ -93,6 +107,13 @@ class ProductService {
 
 class CategoryService {
   final Dio _dio = DioClient.instance.dio;
+
+  Future<List<Category>> listCached({String? status}) async {
+    final saved = await OfflineEngine.instance.peek('/categories', query: {if (status != null) 'status': status});
+    final rows = saved?['data'];
+    if (rows is! List) return const [];
+    return rows.map((e) => Category.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
 
   Future<List<Category>> list({String? status}) async {
     try {

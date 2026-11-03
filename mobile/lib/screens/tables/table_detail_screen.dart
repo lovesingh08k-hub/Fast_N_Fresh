@@ -102,7 +102,17 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
   }
 
   Future<void> _load() async {
-    if (mounted) setState(() { _loading = true; _error = null; });
+    if (mounted) setState(() { _loading = _table == null; _error = null; });
+    if (_table == null) {
+      final saved = await _service.getDetailCached(widget.tableId);
+      if (saved != null && mounted && _table == null) {
+        setState(() {
+          _table = saved.$1;
+          _openOrders = saved.$2;
+          _loading = false;
+        });
+      }
+    }
     try {
       final result = await _service.getDetail(widget.tableId);
       final prefs = await SharedPreferences.getInstance();

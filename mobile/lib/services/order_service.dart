@@ -1,4 +1,5 @@
 import '../core/network/dio_client.dart';
+import '../core/offline/offline_engine.dart';
 import '../models/order.dart';
 import '../models/bill.dart';
 import '../models/cart_item.dart';
@@ -327,6 +328,31 @@ class OrderService {
     } catch (e) {
       throw DioClient.instance.mapError(e);
     }
+  }
+
+  /// The same list as last seen on this device; null if it never was.
+  Future<List<Order>?> listCached({
+    DateTime? from,
+    DateTime? to,
+    String? paymentMethod,
+    String? search,
+    String? orderType,
+    String? status,
+    int page = 1,
+    int limit = 30,
+  }) async {
+    final saved = await OfflineEngine.instance.peek('/orders', query: {
+      if (from != null) 'from': from.toUtc().toIso8601String(),
+      if (to != null) 'to': to.toUtc().toIso8601String(),
+      if (paymentMethod != null) 'paymentMethod': paymentMethod,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (orderType != null) 'orderType': orderType,
+      if (status != null) 'status': status,
+      'page': page,
+      'limit': limit,
+    });
+    final rows = saved?['data'];
+    return rows is List ? rows.map((item) => Order.fromJson(item as Map<String, dynamic>)).toList() : null;
   }
 
   /// Gets order history.

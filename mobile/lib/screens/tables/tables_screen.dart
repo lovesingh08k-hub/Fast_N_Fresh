@@ -93,6 +93,10 @@ class _TablesScreenState extends State<TablesScreen> with WidgetsBindingObserver
     if (mounted) setState(() { _loading = true; _error = null; });
     _takeawayKey.currentState?.refresh();
     _deliveryKey.currentState?.refresh();
+    if (_tables.isEmpty) {
+      final saved = await _service.listCached();
+      if (saved != null && mounted && _tables.isEmpty) setState(() => _tables = saved);
+    }
     try {
       final tables = await _service.list();
       if (!mounted) return;

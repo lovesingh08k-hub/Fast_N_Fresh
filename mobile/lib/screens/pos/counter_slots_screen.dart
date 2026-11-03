@@ -90,6 +90,15 @@ class CountersPanelState extends State<CountersPanel> {
   /// the progress bar, for background polling.
   Future<void> refresh({bool silent = false}) async {
     if (mounted && !silent) setState(() => _loading = true);
+    if (_orders.isEmpty) {
+      final saved = await OrderService().listCached(orderType: widget.orderType, status: 'active', limit: 100);
+      if (saved != null && mounted && _orders.isEmpty) {
+        setState(() {
+          _orders = saved.where((o) => o.paymentStatus != 'paid').toList()
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
+      }
+    }
     String? error;
     await Future.wait([
       _counterService.list(widget.orderType).then((counters) {

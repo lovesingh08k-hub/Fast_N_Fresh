@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
+import '../core/offline/offline_engine.dart';
 import '../models/table.dart';
 import '../models/order.dart';
 
@@ -14,6 +15,22 @@ class TableService {
     } catch (e) {
       throw DioClient.instance.mapError(e);
     }
+  }
+
+  Future<List<CafeTable>?> listCached() async {
+    final saved = await OfflineEngine.instance.peek('/tables');
+    final rows = saved?['data'];
+    return rows is List ? rows.map((e) => CafeTable.fromJson(e as Map<String, dynamic>)).toList() : null;
+  }
+
+  Future<(CafeTable, List<Order>)?> getDetailCached(String tableId) async {
+    final saved = await OfflineEngine.instance.peek('/tables/$tableId');
+    final data = saved?['data'];
+    if (data is! Map<String, dynamic>) return null;
+    return (
+      CafeTable.fromJson(data['table'] as Map<String, dynamic>),
+      (data['openOrders'] as List<dynamic>).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList(),
+    );
   }
 
   /// Returns the table plus all its currently active (unpaid) customer orders: open, preparing or ready.

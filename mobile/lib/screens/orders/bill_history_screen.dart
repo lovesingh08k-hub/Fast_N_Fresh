@@ -89,6 +89,16 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
       _loading = true;
       _error = null;
     });
+    if (_bills.isEmpty) {
+      try {
+        final saved = await _service.listCached(from: _from, to: _to, paymentMethod: _payment, orderType: _type, search: _search.text, limit: 100);
+        if (saved != null && mounted && _bills.isEmpty) {
+          setState(() => _bills = saved.where((o) => o.status != 'voided').toList());
+        }
+      } catch (_) {
+        // The fresh load fills the screen anyway.
+      }
+    }
     try {
       // Bills is the billing register, not only the paid-sales register.
       // Include active/unpaid bills as well as completed bills so a bill that

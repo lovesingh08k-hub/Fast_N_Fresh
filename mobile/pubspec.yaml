@@ -67,6 +67,7 @@ dependencies:
   # Used to distinguish Android 12+ (API 31+)
   # Bluetooth permissions from older Android permissions
   device_info_plus: ^11.5.0
+  cached_network_image: ^3.4.1
 
 dev_dependencies:
   flutter_test:

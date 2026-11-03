@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -74,6 +76,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _showSaved();
     _load();
     // Popular Dishes shows menu photos and prices.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -160,6 +163,21 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   /// Refreshes both sections. They run independently (not Future.wait),
   /// so one failing can never hide a successful response from the other.
+  /// Numbers from the last visit, on screen until the fresh ones arrive.
+  Future<void> _showSaved() async {
+    try {
+      final data = await _dashboardService.dashboardCached();
+      final overview = await _dashboardService.overviewCached();
+      if (!mounted) return;
+      setState(() {
+        _data ??= data;
+        _overview ??= overview;
+      });
+    } catch (_) {
+      // The fresh load fills the screen anyway.
+    }
+  }
+
   Future<void> _load() async {
     await Future.wait([
       _loadStats(),
@@ -982,12 +1000,12 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * .25),
-      child: Image.network(
-        ApiConfig.resolveAssetUrl(imageUrl),
+      child: CachedNetworkImage(
+        imageUrl: ApiConfig.resolveAssetUrl(imageUrl),
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => fallback,
+        errorWidget: (_, __, ___) => fallback,
       ),
     );
   }

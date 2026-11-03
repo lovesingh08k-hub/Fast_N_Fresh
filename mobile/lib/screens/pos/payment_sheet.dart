@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -451,12 +453,8 @@ class _PaymentSheetState extends State<PaymentSheet> {
       // Clear the complete cart/order context.
       cart.clear();
 
-      // Refresh product stock.
-      await context
-          .read<CatalogProvider>()
-          .load();
-
-      if (!mounted) return;
+      // Refresh product stock in the background.
+      unawaited(context.read<CatalogProvider>().load());
 
       // Close PaymentSheet.
       Navigator.of(context).pop();

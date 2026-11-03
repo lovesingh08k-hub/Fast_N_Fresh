@@ -145,6 +145,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       currentUser = AppUser.fromJson(decoded);
+      OfflineEngine.instance.setUser(currentUser?.id);
       if (sessionJson != null && sessionJson.isNotEmpty) {
         final rawSession = jsonDecode(sessionJson);
         if (rawSession is Map<String, dynamic>) _applySession(BusinessSession.fromJson(rawSession));
@@ -200,6 +201,7 @@ class AuthProvider extends ChangeNotifier {
         await _authService.getMe(keepOutlet: session?.currentOutletCode);
 
     currentUser = freshUser;
+    OfflineEngine.instance.setUser(freshUser.id);
     if (freshSession != null) {
       _applySession(freshSession);
       await _saveSession();
@@ -236,6 +238,7 @@ class AuthProvider extends ChangeNotifier {
       await _saveSession();
 
       currentUser = user;
+      OfflineEngine.instance.setUser(user.id);
       licenceMessage = null;
       status = AuthStatus.authenticated;
       isLoading = false;
@@ -288,6 +291,7 @@ class AuthProvider extends ChangeNotifier {
     }
 
     currentUser = null;
+    OfflineEngine.instance.setUser(null);
     _applySession(null);
     licenceMessage = null;
     status = AuthStatus.unauthenticated;

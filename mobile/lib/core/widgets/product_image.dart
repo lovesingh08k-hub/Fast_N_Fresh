@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../network/api_config.dart';
@@ -84,13 +85,13 @@ class ProductImage extends StatelessWidget {
         height: height,
         child: url.isEmpty
             ? placeholder
-            : Image.network(
-                ApiConfig.resolveAssetUrl(url),
+            : CachedNetworkImage(
+                imageUrl: ApiConfig.resolveAssetUrl(url),
                 fit: fit,
                 width: width,
                 height: height,
-                errorBuilder: (_, __, ___) => placeholder,
-                loadingBuilder: (_, child, progress) => progress == null ? child : placeholder,
+                errorWidget: (_, __, ___) => placeholder,
+                placeholder: (_, __) => placeholder,
               ),
       ),
     );

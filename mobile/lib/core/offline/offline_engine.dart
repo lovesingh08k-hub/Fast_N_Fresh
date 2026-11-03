@@ -67,6 +67,9 @@ class OfflineEngine extends ChangeNotifier {
   Map<String, Map<String, dynamic>> _directory = {};
   Map<String, Map<String, dynamic>> _knownOrders = {};
   Map<String, int> _cacheIndex = {};
+  int _directoryAt = 0;
+  String? _user;
+  Map<String, dynamic>? _settingsMemo;
   final Map<String, int> _writtenHash = {};
 
   Timer? _pingTimer;
@@ -145,8 +148,16 @@ class OfflineEngine extends ChangeNotifier {
     final value = scope.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     if (value == _scope) return;
     _scope = value;
+    _settingsMemo = null;
     _loading = null;
     if (enabled) unawaited(_ensureLoaded());
+  }
+
+  /// Who is logged in: what the server shows depends on the person, so one
+  /// staff member must never be shown what was stored for the owner.
+  void setUser(String? id) {
+    _user = id;
+    _settingsMemo = null;
   }
 
   Future<void> _ensureLoaded() => _loading ??= _load();
@@ -180,6 +191,7 @@ class OfflineEngine extends ChangeNotifier {
       _seq = (meta['seq'] as num?)?.toInt() ?? 0;
       _idMap = (meta['ids'] as Map?)?.cast<String, String>() ?? {};
       _cacheIndex = (meta['cache'] as Map?)?.map((k, v) => MapEntry('$k', (v as num).toInt())) ?? {};
+      _directoryAt = (meta['directoryAt'] as num?)?.toInt() ?? 0;
     } catch (_) {
       _seq = 0;
       _idMap = {};
@@ -201,7 +213,7 @@ class OfflineEngine extends ChangeNotifier {
 
   Future<void> _saveCustomers() => _write('customers', jsonEncode(_customers));
 
-  Future<void> _saveMeta() => _write('meta', jsonEncode({'seq': _seq, 'ids': _idMap, 'cache': _cacheIndex}));
+  Future<void> _saveMeta() => _write('meta', jsonEncode({'seq': _seq, 'ids': _idMap, 'cache': _cacheIndex, 'directoryAt': _directoryAt}));
 
   // -------------------------------------------------------------------
   // ONLINE / OFFLINE
@@ -253,6 +265,8 @@ class OfflineEngine extends ChangeNotifier {
     final dio = _dio;
     if (dio == null || !enabled || isOffline) return;
     await _ensureLoaded();
+    // The screen the user just opened goes first.
+    await Future<void>.delayed(const Duration(seconds: 2));
     try {
       await Future.wait([
         dio.get('/settings'),
@@ -268,12 +282,56 @@ class OfflineEngine extends ChangeNotifier {
         final rows = (res.data as Map)['data'] as List? ?? const [];
         if (rows.length < 200) break;
       }
-      final res = await dio.get('/customers/directory');
-      final rows = (res.data as Map)['data'] as List? ?? const [];
-      _directory = {for (final row in rows) '${row['_id']}': (row as Map).cast<String, dynamic>()};
-      await _write('directory', jsonEncode(_directory));
+      // All customers is a big download, and customers seen in between are
+      // added to the list anyway.
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_directory.isEmpty || now - _directoryAt > const Duration(hours: 1).inMilliseconds) {
+        final res = await dio.get('/customers/directory');
+        final rows = (res.data as Map)['data'] as List? ?? const [];
+        _directory = {for (final row in rows) '${row['_id']}': (row as Map).cast<String, dynamic>()};
+        _directoryAt = now;
+        await _write('directory', jsonEncode(_directory));
+        await _saveMeta();
+      }
     } catch (_) {
       // Whatever was saved stays; the next refresh gets the rest.
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // INSTANT SCREENS
+  // -------------------------------------------------------------------
+
+  /// What the server last answered to this request, with this device's unsent
+  /// work added. Screens show it at once and then replace it with the fresh
+  /// answer, so opening a screen does not wait for the network.
+  Future<Map<String, dynamic>?> peek(String path, {Map<String, dynamic> query = const {}}) async {
+    if (!enabled) return null;
+    await _ensureLoaded();
+    final options = RequestOptions(path: path, queryParameters: query);
+    final stored = await _cached(options);
+    return stored == null ? null : _overlay(options, stored);
+  }
+
+  /// The menu as last seen.
+  List<Map<String, dynamic>> get cachedCatalog => enabled ? _catalog.values.toList() : const [];
+
+  /// The bill for a cart worked out here, the same as the server would. Null
+  /// when this device does not know the settings or an item yet.
+  Future<Map<String, dynamic>?> quoteNow({
+    required List<Map<String, dynamic>> items,
+    required String orderType,
+    required Map<String, dynamic> adjust,
+  }) async {
+    if (!enabled) return null;
+    await _ensureLoaded();
+    final settings = await _settings();
+    if (settings.isEmpty) return null;
+    try {
+      final lines = _priceLines(RequestOptions(path: '/orders/quote'), items);
+      return computeLocalBill(lines: lines, settings: settings, orderType: orderType, adjust: _adjustOf(adjust));
+    } on DioException {
+      return null;
     }
   }
 
@@ -374,7 +432,7 @@ class OfflineEngine extends ChangeNotifier {
   String _cacheFile(String key) {
     var a = 7;
     var b = 11;
-    for (final unit in key.codeUnits) {
+    for (final unit in '$_user|$key'.codeUnits) {
       a = (a * 31 + unit) & 0x7fffffff;
       b = (b * 131 + unit) & 0x7fffffff;
     }
@@ -386,6 +444,7 @@ class OfflineEngine extends ChangeNotifier {
     final query = options.queryParameters;
     final payload = data['data'];
 
+    if (path == '/settings') _settingsMemo = null;
     if (path == '/products' && payload is List && !query.containsKey('search')) {
       for (final row in payload) {
         if (row is Map) _catalog['${row['_id']}'] = row.cast<String, dynamic>();
@@ -452,9 +511,11 @@ class OfflineEngine extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> _settings() async {
+    final memo = _settingsMemo;
+    if (memo != null) return memo;
     try {
       final raw = await _blobs.read(_file(_cacheFile('/settings?')));
-      if (raw != null) return (((jsonDecode(raw) as Map)['data'] as Map?) ?? const {}).cast<String, dynamic>();
+      if (raw != null) return _settingsMemo = (((jsonDecode(raw) as Map)['data'] as Map?) ?? const {}).cast<String, dynamic>();
     } catch (_) {
       // Falls through to no GST and no charges.
     }

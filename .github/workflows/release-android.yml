@@ -293,6 +293,7 @@ jobs:
         run: |
           flutter build apk \
             --release \
+            --target-platform android-arm,android-arm64 \
             --build-name="${{ inputs.version }}" \
             --build-number="${{ steps.build.outputs.build_number }}"
 

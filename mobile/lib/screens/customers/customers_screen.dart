@@ -108,6 +108,12 @@ class _CustomersScreenState extends State<CustomersScreen> with WidgetsBindingOb
       _isRefreshing = true;
     });
 
+    if (_customers == null && _searchController.text.trim().isEmpty) {
+      final saved = await _service.listCached(hasDue: _dueOnly ? true : null);
+      if (saved != null && mounted && _customers == null) setState(() => _customers = saved);
+      if (!mounted) return;
+    }
+
     try {
       final customers = await _service.list(
         search: _searchController.text.trim(),

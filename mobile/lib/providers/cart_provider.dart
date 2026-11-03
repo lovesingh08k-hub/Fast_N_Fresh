@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/offline/offline_engine.dart';
 import '../models/bill.dart';
 import '../services/order_service.dart';
 
@@ -70,7 +71,22 @@ class CartProvider extends ChangeNotifier {
     final key = _currentQuoteKey;
     if (key == _quoteKey) return;
     _quoteTimer?.cancel();
-    _quoteTimer = Timer(const Duration(milliseconds: 250), () => _fetchQuote(key));
+    _quoteTimer = Timer(const Duration(milliseconds: 600), () => _fetchQuote(key));
+    unawaited(_quoteOnThisPhone(key));
+  }
+
+  /// The total changes the moment an item is tapped; the server's answer
+  /// follows and is the same unless the menu has changed meanwhile.
+  Future<void> _quoteOnThisPhone(String key) async {
+    final bill = await OfflineEngine.instance.quoteNow(
+      items: OrderService.itemsPayload(_items.values.toList()),
+      orderType: orderType,
+      adjust: billAdjustments,
+    );
+    if (bill == null || key != _currentQuoteKey) return;
+    quote = BillBreakdown.fromJson(bill);
+    _quoteKey = key;
+    super.notifyListeners();
   }
 
   Future<void> _fetchQuote(String key) async {

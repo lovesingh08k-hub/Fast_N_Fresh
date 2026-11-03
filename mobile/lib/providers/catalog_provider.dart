@@ -56,7 +56,12 @@ class CatalogProvider extends ChangeNotifier {
   }
 
   Future<void> _loadInternal() async {
-    isLoading = true;
+    // Show the saved menu at once; the fresh one replaces it without a spinner.
+    if (products.isEmpty) {
+      products = _productService.listCached();
+      if (categories.isEmpty) categories = await _categoryService.listCached(status: 'active');
+    }
+    isLoading = products.isEmpty;
     errorMessage = null;
     categoryErrorMessage = null;
     notifyListeners();

@@ -1,11 +1,22 @@
 import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
+import '../core/offline/offline_engine.dart';
 import '../models/customer.dart';
 
 class CustomerService {
   final Dio _dio = DioClient.instance.dio;
 
   static const pageSize = 100;
+
+  /// The first page as last seen on this device.
+  Future<List<Customer>?> listCached({bool? hasDue}) async {
+    final saved = await OfflineEngine.instance.peek('/customers', query: {
+      if (hasDue == true) 'hasDue': 'true',
+      'limit': pageSize,
+    });
+    final rows = saved?['data'];
+    return rows is List ? rows.map((e) => Customer.fromJson(e as Map<String, dynamic>)).toList() : null;
+  }
 
   Future<List<Customer>> list({String? search, bool? hasDue, int page = 1}) async {
     try {

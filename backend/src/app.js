@@ -15,6 +15,7 @@ const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const mongoSanitize = require('express-mongo-sanitize');
@@ -73,6 +74,8 @@ const apiLimiter = rateLimit({
 // Security & parsing middleware
 // crossOriginResourcePolicy relaxed so product images can be loaded by the
 // Flutter app (a different origin) — everything else stays locked down.
+// Menus and order lists shrink to about a tenth: most noticeable on slow mobile data.
+app.use(compression());
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(express.json({
   limit: '2mb',

@@ -269,6 +269,25 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
+  /// Running orders from the last visit, on screen until the fresh ones arrive.
+  Future<void> _showSaved() async {
+    try {
+      final saved = await Future.wait([
+        _service.listCached(status: 'open', limit: 200),
+        _service.listCached(status: 'preparing', limit: 200),
+        _service.listCached(status: 'ready', limit: 200),
+      ]);
+      final tables = await _tableService.listCached();
+      if (saved.first == null || tables == null || !mounted || _orders != null) return;
+      setState(() {
+        _orders = [for (final list in saved) ...?list]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _tables = tables;
+      });
+    } catch (_) {
+      // The fresh load fills the screen anyway.
+    }
+  }
+
   Future<void> _load({
     bool notifyNewQr = false,
   }) async {
@@ -277,6 +296,9 @@ class _OrdersScreenState extends State<OrdersScreen>
     setState(() {
       _isRefreshing = true;
     });
+
+    if (_orders == null) await _showSaved();
+    if (!mounted) return;
 
     /*
      * Kitchen badge is independent from Orders filters.
