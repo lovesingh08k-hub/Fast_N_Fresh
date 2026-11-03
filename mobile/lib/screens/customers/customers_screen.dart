@@ -40,6 +40,11 @@ class _CustomersScreenState extends State<CustomersScreen> with WidgetsBindingOb
   String? _error;
   bool _dueOnly = false;
 
+  // The list comes a page at a time; more loads on reaching the end.
+  int _page = 1;
+  bool _hasMore = false;
+  bool _loadingMore = false;
+
   AppLifecycleState? _lastLifecycleState;
   ConnectivityProvider? _connectivity;
   bool _wasOnline = true;
@@ -113,6 +118,8 @@ class _CustomersScreenState extends State<CustomersScreen> with WidgetsBindingOb
 
       setState(() {
         _customers = customers;
+        _page = 1;
+        _hasMore = customers.length >= CustomerService.pageSize;
         _error = null;
       });
     } on ApiException catch (e) {
@@ -251,6 +258,28 @@ class _CustomersScreenState extends State<CustomersScreen> with WidgetsBindingOb
     );
   }
 
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final more = await _service.list(
+        search: _searchController.text.trim(),
+        hasDue: _dueOnly ? true : null,
+        page: _page + 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _customers = [...?_customers, ...more];
+        _page += 1;
+        _hasMore = more.length >= CustomerService.pageSize;
+      });
+    } catch (_) {
+      // The list stays as it is; scrolling to the end tries again.
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
   Widget _buildBody({required bool canViewCreditHistory}) {
     final customers = _customers;
 
@@ -295,7 +324,7 @@ class _CustomersScreenState extends State<CustomersScreen> with WidgetsBindingOb
       onRefresh: _load,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
-        itemCount: customers.length + (_error != null ? 1 : 0),
+        itemCount: customers.length + (_error != null ? 1 : 0) + (_hasMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           if (_error != null && index == 0) {
@@ -306,6 +335,13 @@ class _CustomersScreenState extends State<CustomersScreen> with WidgetsBindingOb
           }
 
           final customerIndex = _error != null ? index - 1 : index;
+          if (customerIndex >= customers.length) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+            return const Padding(
+              padding: EdgeInsets.all(12),
+              child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+            );
+          }
           final customer = customers[customerIndex];
 
           return _CustomerTile(

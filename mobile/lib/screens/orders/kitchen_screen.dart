@@ -30,7 +30,9 @@ class _KitchenScreenState extends State<KitchenScreen> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _load(silent: true));
+    _timer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) _load(silent: true);
+    });
   }
 
   @override

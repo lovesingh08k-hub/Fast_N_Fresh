@@ -20,6 +20,7 @@ const crypto = require('crypto');
 const mongoSanitize = require('express-mongo-sanitize');
 
 const connectDB = require('./config/db');
+const { verifyToken } = require('./utils/jwt');
 const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { ImageAsset } = require('./models');
@@ -42,9 +43,27 @@ app.use((req, res, next) => {
   next();
 });
 
+// All devices of a cafe share one internet address, so a logged-in user is
+// counted on their own; only anonymous traffic is counted per address.
+function signedInUser(req) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return null;
+  try {
+    return verifyToken(header.slice(7)).sub || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: Number(process.env.API_RATE_LIMIT_MAX) || 240,
+  max: (req) => (signedInUser(req)
+    ? Number(process.env.API_RATE_LIMIT_USER_MAX) || 600
+    : Number(process.env.API_RATE_LIMIT_MAX) || 240),
+  keyGenerator: (req) => {
+    const user = signedInUser(req);
+    return user ? `user:${user}` : req.ip;
+  },
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.path === '/health',

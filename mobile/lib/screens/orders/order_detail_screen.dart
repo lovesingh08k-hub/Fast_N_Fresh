@@ -16,8 +16,99 @@ import '../../services/receipt_service.dart';
 import '../pos/bill_success_screen.dart';
 import 'open_bill.dart';
 import 'qr_checkout_sheet.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../settings/printer_settings_screen.dart';
+
+class _RefundDialog extends StatefulWidget {
+  final Order order;
+  final Map<String, double> methods;
+  const _RefundDialog({required this.order, required this.methods});
+
+  @override
+  State<_RefundDialog> createState() => _RefundDialogState();
+}
+
+class _RefundDialogState extends State<_RefundDialog> {
+  late String _method = widget.methods.keys.first;
+  late final _amount = TextEditingController(text: widget.methods[_method]!.toStringAsFixed(0));
+  final _reason = TextEditingController();
+  final _reference = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _reason.dispose();
+    _reference.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amount.text.trim());
+    if (amount == null || amount <= 0) return setState(() => _error = 'Enter a valid amount.');
+    if (_reason.text.trim().isEmpty) return setState(() => _error = 'Please give a reason.');
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final order = await OrderService().refund(widget.order.id, amount: amount, method: _method, reason: _reason.text.trim(), reference: _reference.text);
+      if (mounted) Navigator.pop(context, order);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not record the refund.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Refund bill #${widget.order.orderNumber}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.methods.length > 1)
+              DropdownButtonFormField<String>(
+                initialValue: _method,
+                decoration: const InputDecoration(labelText: 'Refund to'),
+                items: [
+                  for (final entry in widget.methods.entries)
+                    DropdownMenuItem(value: entry.key, child: Text('${entry.key == 'CREDIT' ? 'Udhar' : entry.key} (paid ${Formatters.currency(entry.value)})')),
+                ],
+                onChanged: (value) => setState(() {
+                  _method = value!;
+                  _amount.text = widget.methods[value]!.toStringAsFixed(0);
+                }),
+              ),
+            const SizedBox(height: 12),
+            TextField(controller: _amount, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount')),
+            const SizedBox(height: 12),
+            TextField(controller: _reason, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'Reason')),
+            if (_method == 'UPI') ...[
+              const SizedBox(height: 12),
+              TextField(controller: _reference, decoration: const InputDecoration(labelText: 'UPI refund reference')),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: TextStyle(color: AppColors.danger, fontSize: 13)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _busy ? null : _submit, child: const Text('Refund')),
+      ],
+    );
+  }
+}
 
 class OrderDetailScreen extends StatefulWidget {
   final String orderId;
@@ -223,6 +314,28 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> with WidgetsBindi
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill completed and payment recorded.')));
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => BillSuccessScreen(order: updated)));
+    }
+  }
+
+  Future<void> _refund(Order order) async {
+    final paid = order.paymentBreakdown;
+    final methods = <String, double>{
+      'CASH': paid.cash,
+      'UPI': paid.upi,
+      'CARD': paid.card,
+      'ONLINE': paid.online,
+      'CREDIT': paid.credit,
+    }..removeWhere((_, amount) => amount <= 0);
+    if (methods.isEmpty) return;
+    // Paid one way: what is left is simply the paid amount less earlier refunds.
+    if (methods.length == 1) methods.updateAll((_, amount) => amount - order.refundedAmount);
+    final done = await showDialog<Order>(
+      context: context,
+      builder: (_) => _RefundDialog(order: order, methods: methods),
+    );
+    if (done != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Refund recorded.')));
+      _load();
     }
   }
 
@@ -491,6 +604,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> with WidgetsBindi
                       ],
                     ],
                   ),
+                ),
+              ],
+              if (order.refundedAmount > 0) ...[
+                const SizedBox(height: 8),
+                _row('Refunded', '- ${Formatters.currency(order.refundedAmount)}'),
+              ],
+              if (order.status == 'completed' && order.refundStatus != 'refunded' && !order.isOfflinePending && context.read<AuthProvider>().currentUser?.canViewCreditHistory == true) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _refund(order),
+                  icon: const Icon(Icons.undo_rounded, size: 18),
+                  label: const Text('Refund'),
                 ),
               ],
               if (!order.isQrOrder && order.paymentStatus != 'paid' && const ['open', 'preparing', 'ready'].contains(order.status)) ...[

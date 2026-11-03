@@ -97,9 +97,18 @@ class _BillSuccessScreenState extends State<BillSuccessScreen> {
               const SizedBox(height: 24),
               Text('Bill Created!', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 6),
-              Text('Bill #${order.orderNumber}', style: Theme.of(context).textTheme.bodyLarge),
+              if (!order.isOfflinePending) Text('Bill #${order.orderNumber}', style: Theme.of(context).textTheme.bodyLarge),
               if (order.invoiceNumber != null)
                 Text('Invoice ${order.invoiceNumber}', style: TextStyle(color: AppColors.textSecondary)),
+              if (order.isOfflinePending)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    'Saved on this phone. It goes to the server when the internet is back.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
+                  ),
+                ),
               const SizedBox(height: 4),
               Text(Formatters.currency(order.grandTotal), style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: AppColors.primary)),
               const Spacer(),

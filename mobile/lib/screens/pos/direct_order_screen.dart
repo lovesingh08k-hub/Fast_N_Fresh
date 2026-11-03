@@ -173,6 +173,7 @@ class _DirectOrderScreenState extends State<DirectOrderScreen> {
       showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
+        useSafeArea: true,
         backgroundColor: Colors.transparent,
         builder: (_) => const PaymentSheet(),
       );

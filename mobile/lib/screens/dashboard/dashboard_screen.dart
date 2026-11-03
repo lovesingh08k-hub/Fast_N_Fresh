@@ -82,8 +82,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     // QR orders are created outside the staff app, so the dashboard must
     // refresh periodically instead of waiting for the user to revisit the
     // tab. This keeps the Orders card and Recent Orders live.
-    _refreshTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (mounted) _load();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted && TickerMode.valuesOf(context).enabled && ModalRoute.of(context)?.isCurrent == true) _load();
     });
   }
 

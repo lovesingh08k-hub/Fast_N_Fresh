@@ -314,6 +314,21 @@ class OrderService {
     }
   }
 
+  /// Gives back all or part of a paid bill (admin/manager).
+  Future<Order> refund(String orderId, {required double amount, required String method, required String reason, String? reference}) async {
+    try {
+      final res = await _dio.post('/orders/$orderId/refund', data: {
+        'amount': amount,
+        'method': method,
+        'reason': reason,
+        if (reference != null && reference.trim().isNotEmpty) 'reference': reference.trim(),
+      });
+      return Order.fromJson(res.data['data']['order'] as Map<String, dynamic>);
+    } catch (e) {
+      throw DioClient.instance.mapError(e);
+    }
+  }
+
   /// Gets order history.
   Future<List<Order>> list({
     DateTime? from,

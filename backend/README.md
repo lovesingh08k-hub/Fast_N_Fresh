@@ -242,6 +242,25 @@ JSON backup and an Excel-ready CSV of bills, then delete those records from
 the server. The last 90 days and open bills always stay; customers, menu,
 tables and staff are never deleted; a per-day sales total is kept.
 
+### Offline bills and refunds
+
+- `POST /api/orders/offline-sync` receives bills and running orders made on a
+  phone without internet. Sending one twice is harmless (`clientRequestId`). It
+  keeps the phone's prices, GST settings and time, allows stock below zero, and
+  still records a sale on a closed business day, because the customer has already
+  paid. Each one is in the audit log.
+- `POST /api/orders/:id/refund` takes `amount`, `method` (CASH, UPI, CARD, ONLINE,
+  or CREDIT to reduce the customer's udhar) and `reason`. It can be used several
+  times up to what was paid. The bill stays in history, and `/reports/sales` shows
+  `refunds` and `netSales`. Stock is not put back, and no GST credit note is made.
+- A customer's phone number can be saved only once (the last 10 digits are compared).
+
+### Rate limits
+
+`API_RATE_LIMIT_USER_MAX` (default 600 a minute) applies per logged-in user, so
+all phones on one cafe's WiFi do not share a limit. `API_RATE_LIMIT_MAX` (default
+240) applies per address to requests that are not logged in.
+
 ## 9. Uptime monitoring (UptimeRobot)
 
 Render's free plan puts the service to sleep after ~15 minutes without

@@ -74,12 +74,12 @@ class _OrdersScreenState extends State<OrdersScreen>
     _load();
 
     /*
-     * Poll every 8 seconds so QR orders appear quickly.
+     * Poll while this tab is on screen so QR orders appear quickly.
      */
     _qrPollTimer = Timer.periodic(
-      const Duration(seconds: 8),
+      const Duration(seconds: 15),
       (_) {
-        if (mounted) {
+        if (mounted && TickerMode.valuesOf(context).enabled && ModalRoute.of(context)?.isCurrent == true) {
           _load(notifyNewQr: true);
         }
       },

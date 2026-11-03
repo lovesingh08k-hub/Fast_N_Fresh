@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/offline/offline_engine.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/fresh_ui.dart';
 import '../../core/widgets/outlet_switcher.dart';
@@ -18,6 +19,7 @@ import '../staff/staff_screen.dart';
 import '../tables/qr_management_screen.dart';
 import '../tables/tables_screen.dart';
 import '../users/users_screen.dart';
+import 'offline_sync_screen.dart';
 import 'archive_screen.dart';
 import 'change_password_screen.dart';
 import 'profile_screen.dart';
@@ -89,6 +91,7 @@ class MoreScreen extends StatelessWidget {
                   const _Tool('Staff Performance', Icons.leaderboard_outlined, AttendanceScreen()),
                   const _Tool('Settings', Icons.settings_outlined, SettingsScreen()),
                   const _Tool('Data & Storage', Icons.storage_rounded, ArchiveScreen()),
+                  const _Tool('Offline Sync', Icons.cloud_sync_rounded, OfflineSyncScreen()),
                 ],
               ),
             if (user.isStaff)
@@ -97,6 +100,7 @@ class MoreScreen extends StatelessWidget {
                 items: [
                   const _Tool('Customers', Icons.people_alt_outlined, CustomersScreen()),
                   const _Tool('Profile', Icons.person_outline_rounded, ProfileScreen()),
+                  const _Tool('Offline Sync', Icons.cloud_sync_rounded, OfflineSyncScreen()),
                 ],
               ),
             const SizedBox(height: 4),
@@ -250,7 +254,7 @@ class MoreScreen extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: OutlinedButton.icon(
-            onPressed: () => context.read<AuthProvider>().logout(),
+            onPressed: () => _confirmLogout(context),
             icon: Icon(Icons.logout_rounded, size: 18, color: AppColors.danger),
             label: Text('Logout', style: label.copyWith(color: AppColors.danger)),
             style: OutlinedButton.styleFrom(
@@ -267,6 +271,27 @@ class MoreScreen extends StatelessWidget {
   void _open(BuildContext context, Widget page) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
   }
+}
+
+/// Unsent bills stay safe across a logout, but only reach the server once
+/// someone logs in again on this phone, so say so first.
+Future<void> _confirmLogout(BuildContext context) async {
+  final waiting = OfflineEngine.instance.pendingCount;
+  if (waiting > 0) {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unsent work on this phone'),
+        content: Text('$waiting saved record${waiting == 1 ? '' : 's'} have not reached the server yet. They stay on this phone and are sent after the next login here.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Stay')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Logout')),
+        ],
+      ),
+    );
+    if (go != true || !context.mounted) return;
+  }
+  await context.read<AuthProvider>().logout();
 }
 
 class _Tool {

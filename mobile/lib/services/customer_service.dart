@@ -5,12 +5,15 @@ import '../models/customer.dart';
 class CustomerService {
   final Dio _dio = DioClient.instance.dio;
 
-  Future<List<Customer>> list({String? search, bool? hasDue}) async {
+  static const pageSize = 100;
+
+  Future<List<Customer>> list({String? search, bool? hasDue, int page = 1}) async {
     try {
       final res = await _dio.get('/customers', queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
         if (hasDue == true) 'hasDue': 'true',
-        'limit': 200,
+        'limit': pageSize,
+        if (page > 1) 'page': page,
       });
       final list = res.data['data'] as List<dynamic>;
       return list.map((e) => Customer.fromJson(e as Map<String, dynamic>)).toList();

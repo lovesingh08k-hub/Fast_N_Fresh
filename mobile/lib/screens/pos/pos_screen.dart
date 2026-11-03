@@ -468,6 +468,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const PaymentSheet(),
     );

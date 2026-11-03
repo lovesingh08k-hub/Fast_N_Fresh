@@ -62,10 +62,35 @@ const getCustomer = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { customer, transactions } });
 });
 
+// One customer per phone number. Only the last 10 digits count, so
+// "+91 98765 43210" and "9876543210" are the same person.
+async function assertPhoneIsFree(phone, exceptId) {
+  const digits = String(phone).replace(/\D/g, '').slice(-10);
+  if (digits.length < 6) return;
+  const pattern = `${digits.split('').join('\\D*')}\\D*$`;
+  const filter = { status: 'active', phone: { $regex: pattern } };
+  if (exceptId) filter._id = { $ne: exceptId };
+  const existing = await Customer.findOne(filter).select('name phone');
+  if (existing) {
+    throw new ApiError(409, `${phone} is already saved for ${existing.name}.`, { code: 'PHONE_EXISTS', customerId: existing._id });
+  }
+}
+
+// GET /api/customers/directory -- everyone, kept small: the app stores it
+// so customers can be found and picked while offline.
+const listCustomerDirectory = asyncHandler(async (req, res) => {
+  const customers = await Customer.find({ status: 'active' })
+    .select('name phone address outstandingBalance totalPurchases status')
+    .sort({ name: 1 })
+    .lean();
+  res.json({ success: true, data: customers });
+});
+
 const createCustomer = asyncHandler(async (req, res) => {
   const { name, phone, address, notes } = req.body;
   if (typeof name !== 'string' || !name.trim()) throw new ApiError(400, 'Customer name is required.');
   if (typeof phone !== 'string' || !phone.trim()) throw new ApiError(400, 'Phone number is required.');
+  await assertPhoneIsFree(phone);
 
   const customer = await Customer.create({
     name: name.trim(),
@@ -81,6 +106,10 @@ const createCustomer = asyncHandler(async (req, res) => {
 const updateCustomer = asyncHandler(async (req, res) => {
   const customer = await Customer.findById(req.params.id);
   if (!customer) throw new ApiError(404, 'Customer not found.');
+
+  if (req.body.phone !== undefined && req.body.phone !== customer.phone) {
+    await assertPhoneIsFree(req.body.phone, customer._id);
+  }
 
   const editable = ['name', 'phone', 'address', 'notes'];
   editable.forEach((field) => {
@@ -191,6 +220,7 @@ const recordPayment = asyncHandler(async (req, res) => {
 
 module.exports = {
   listCustomers,
+  listCustomerDirectory,
   getCustomer,
   createCustomer,
   updateCustomer,

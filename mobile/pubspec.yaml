@@ -4,7 +4,7 @@ description: PWP POS — Personalize Web Page POS application
 
 publish_to: 'none'
 
-version: 1.5.33+33
+version: 1.5.35+35
 
 environment:
   sdk: '>=3.6.0 <4.0.0'

@@ -8,7 +8,7 @@ const creditTransactionSchema = new mongoose.Schema(
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true, index: true },
     type: { type: String, enum: ['DEBIT', 'PAID'], required: true }, // DEBIT = new UDHAR, PAID = payment received
     amount: { type: Number, required: true, min: 0 },
-    method: { type: String, enum: ['CASH', 'UPI', 'ORDER'], required: true }, // ORDER = created via a credit bill
+    method: { type: String, enum: ['CASH', 'UPI', 'ORDER', 'REFUND'], required: true }, // ORDER = created via a credit bill
     order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
     balanceAfter: { type: Number, required: true },
     note: { type: String, trim: true },

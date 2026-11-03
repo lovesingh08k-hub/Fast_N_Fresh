@@ -109,7 +109,9 @@ class HomeGreeting extends StatelessWidget {
         ? 'Good morning'
         : hour >= 12 && hour < 17
             ? 'Good afternoon'
-            : 'Good evening';
+            : hour >= 17
+                ? 'Good evening'
+                : 'Hello';
     final first = userName.trim().split(' ').first;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

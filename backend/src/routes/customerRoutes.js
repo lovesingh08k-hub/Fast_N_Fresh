@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   listCustomers,
+  listCustomerDirectory,
   getCustomer,
   createCustomer,
   updateCustomer,
@@ -14,6 +15,7 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/', listCustomers); // admin + staff
+router.get('/directory', listCustomerDirectory); // kept on the device for offline lookup
 router.get('/:id', getCustomer);
 router.post('/', createCustomer); // admin + staff can add customers
 router.put('/:id', updateCustomer); // admin + staff can edit

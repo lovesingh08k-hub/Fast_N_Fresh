@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 
+import '../offline/offline_engine.dart';
 import 'api_config.dart';
 import 'api_exception.dart';
 import 'network_status.dart';
@@ -91,7 +92,24 @@ class DioClient {
             options.headers['X-Outlet-Id'] = outlet;
           }
 
+          final offline = OfflineEngine.instance;
+          offline.rewriteIds(options);
+          if (offline.shouldServeLocally(options)) {
+            try {
+              handler.resolve(await offline.serve(options));
+            } on DioException catch (refused) {
+              handler.reject(refused);
+            }
+            return;
+          }
+
           handler.next(options);
+        },
+        onResponse: (response, handler) async {
+          final offline = OfflineEngine.instance;
+          offline.markOnline();
+          await offline.onServerResponse(response);
+          handler.next(response);
         },
         onError: (DioException e, handler) {
           // Fire-and-continue: the handler is always resolved/rejected
@@ -120,6 +138,25 @@ class DioClient {
     // check up front regardless of what happens next.
     _checkUnauthorized(err);
     _checkLicence(err);
+
+    final offline = OfflineEngine.instance;
+    if (err.requestOptions.extra['offlineBypass'] == true) {
+      handler.next(err);
+      return;
+    }
+    // No connection: carry on from this device at once rather than making
+    // the cashier wait through the retries. A background check notices when
+    // the server is back.
+    if (offline.canServeAfterFailure(err)) {
+      offline.markOffline();
+      NetworkStatus.instance.reportGaveUp();
+      try {
+        handler.resolve(await offline.serve(err.requestOptions));
+      } on DioException catch (_) {
+        handler.next(err);
+      }
+      return;
+    }
 
     final options = err.requestOptions;
     final attemptSoFar = (options.extra['retryAttempt'] as int?) ?? 0;

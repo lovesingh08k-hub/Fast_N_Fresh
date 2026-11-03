@@ -19,7 +19,7 @@ async function log(req, action, type, id, details={}) { try { await AuditLog.cre
 const getDaySummary = asyncHandler(async (req,res)=>{
   const date = req.query.date || businessDate(); const {start,end}=dayBounds(date);
   const [orders, expenses, shift, movements, refunds, pendingKitchen] = await Promise.all([
-    Order.find({createdAt:{$gte:start,$lte:end},status:'completed'}),
+    Order.find({createdAt:{$gte:start,$lte:end},status:'completed'}).select('grandTotal paymentBreakdown').lean(),
     Expense.find({date:{$gte:start,$lte:end}}),
     DayClose.findOne({businessDate:date}),
     CashMovement.find({businessDate:date}).sort({createdAt:-1}),

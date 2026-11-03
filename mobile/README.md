@@ -184,6 +184,39 @@ matrix.
   compressed client-side before upload and shown in both the product list
   and the POS product grid.
 
+## 7c. Working without internet
+
+The app keeps working when the server cannot be reached, including while a
+sleeping server wakes up. Nothing needs to be switched on: a banner shows the
+app is offline, and work goes to the server by itself when the connection is
+back.
+
+**Works offline** (after the phone has been online once since login):
+counter bills with every payment method, tables and T/D counters, KOTs,
+printing, new customers, finding customers, menu, Home and reports as last seen.
+
+**Needs internet:** first login, editing the menu or staff, refunds, expenses,
+archive, split and merge of bills. These say so instead of failing silently.
+
+**How the numbers work**
+- An offline bill prints a temporary number such as `OFF-3FA2-12`. The server
+  gives the final bill and invoice numbers when it arrives, and keeps the
+  temporary one (`offlineRef`) so a receipt can be matched to the bill.
+- Offline work is on that phone only until it syncs. Other phones do not see it,
+  so two phones can both take the same free table while offline.
+- A bill is recorded as it happened: the price, GST and time from the phone, and
+  stock may go below zero. The audit log marks these bills as offline.
+- **More > Offline Sync** lists what is waiting. A bill the server refuses (for
+  example already paid on another phone) stays there with the reason and is
+  never deleted.
+
+Code: `lib/core/offline/`. The engine sits in the network layer, so screens have
+no offline code of their own. `local_bill.dart` must calculate exactly like
+`backend/src/services/billing.js`: after changing that file, regenerate
+`test/fixtures/bill_cases.json`, and `test/local_bill_test.dart` checks the two
+still agree. `test/offline_e2e_test.dart` runs a whole offline day against a
+throwaway server (see the top of that file).
+
 ## 8. Project structure
 
 ```text

@@ -82,7 +82,7 @@ async function priceLines(items, { session, checkStock = true } = {}) {
       if (!quickName || !Number.isFinite(quickPrice) || quickPrice < 0) {
         throw new ApiError(400, 'Invalid Quick Item name or price.');
       }
-      if (!Number.isFinite(quantity) || quantity < 1) {
+      if (!Number.isInteger(quantity) || quantity < 1) {
         throw new ApiError(400, `Invalid quantity for ${quickName}.`);
       }
       lines.push({ name: quickName, price: quickPrice, quantity, note, quickItem: { name: quickName, price: quickPrice } });
@@ -92,7 +92,7 @@ async function priceLines(items, { session, checkStock = true } = {}) {
     const product = productMap.get(String(line.productId || line.product));
     if (!product) throw new ApiError(400, 'Product not found or unavailable.');
     if (product.status !== 'available') throw new ApiError(400, `${product.name} is currently unavailable.`);
-    if (!Number.isFinite(quantity) || quantity < 1) throw new ApiError(400, `Invalid quantity for ${product.name}.`);
+    if (!Number.isInteger(quantity) || quantity < 1) throw new ApiError(400, `Invalid quantity for ${product.name}.`);
     if (checkStock && product.trackInventory && product.stock < quantity) {
       throw new ApiError(400, `Insufficient stock for ${product.name}. Available: ${product.stock}.`);
     }
@@ -1577,38 +1577,90 @@ const updateKitchenStatus = asyncHandler(async (req, res) => {
 
 // POST /api/orders/:id/refund
 // Records the actual money reversal separately from bill voiding.
+// POST /api/orders/:id/refund { amount, method, reason, reference }
+// Gives back all or part of a paid bill. The bill stays in history; each
+// refund is its own record. method says where the money goes back to, and
+// CREDIT takes the amount off the customer's udhar instead.
 const refundOrder = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id);
-  if (!order) throw new ApiError(404, 'Order not found.');
-  if (order.status !== 'voided') throw new ApiError(409, 'Void the bill before recording a refund.');
-  if (order.refundStatus === 'refunded') throw new ApiError(409, 'Refund is already recorded.');
-  // Only real money (cash/UPI) can be refunded. The credit (UDHAR) portion was
-  // never paid, and voiding already reversed it on the customer's ledger.
-  const paidCash = round2(order.paymentBreakdown?.cash || 0);
-  const paidUpi = round2(order.paymentBreakdown?.upi || 0);
-  const paidAmount = round2(paidCash + paidUpi);
-  if (order.refundStatus === 'not_required' || paidAmount <= 0) {
-    throw new ApiError(409, 'No cash or UPI payment on this bill needs a refund.');
-  }
-  const amount = round2(Number(req.body.amount ?? paidAmount));
-  if (!Number.isFinite(amount) || amount <= 0 || amount > paidAmount) throw new ApiError(400, 'Refund cannot exceed the amount actually paid.');
-  const defaultMethod = paidCash > 0 && paidUpi > 0 ? 'MIXED' : paidUpi > 0 ? 'UPI' : 'CASH';
-  const method = req.body.method || defaultMethod;
-  if (!['CASH','UPI','MIXED'].includes(method)) throw new ApiError(400, 'Invalid refund method.');
-  if (method === 'CASH' && amount > paidCash) throw new ApiError(400, 'Cash refund exceeds cash paid.');
-  if (method === 'UPI' && amount > paidUpi) throw new ApiError(400, 'UPI refund exceeds UPI paid.');
-  if (method === 'UPI' && !String(req.body.reference || '').trim()) throw new ApiError(400, 'UPI refund reference is required.');
+  const reason = String(req.body.reason || req.body.note || '').trim();
+  if (!reason) throw new ApiError(400, 'Please give a reason for the refund.');
+
   const businessDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const day = await DayClose.findOne({ businessDate });
   if (day?.status === 'closed') throw new ApiError(409, 'Business day is closed. Refunds cannot be recorded.');
-  const refund = await RefundTransaction.create({ order: order._id, amount, method, reference: req.body.reference, processedBy: req.user._id, note: req.body.note });
-  order.refundStatus = 'refunded';
-  order.refundedAmount = amount;
-  order.refundedAt = refund.processedAt;
-  order.refundReference = refund.reference;
-  await order.save();
-  await audit(req, 'ORDER_REFUNDED', order, { amount, method, reference: refund.reference });
-  res.status(201).json({ success: true, data: { order, refund } });
+
+  const record = async () => {
+    const session = await startSession();
+    try {
+      let result;
+      await session.withTransaction(async () => {
+        const order = await Order.findById(req.params.id).session(session);
+        if (!order) throw new ApiError(404, 'Order not found.');
+        if (!['completed', 'voided'].includes(order.status)) throw new ApiError(409, 'Only a paid bill can be refunded.');
+        if (order.refundStatus === 'refunded') throw new ApiError(409, 'This bill is already fully refunded.');
+
+        const paid = {
+          CASH: round2(order.paymentBreakdown?.cash || 0),
+          UPI: round2(order.paymentBreakdown?.upi || 0),
+          CARD: round2(order.paymentBreakdown?.card || 0),
+          ONLINE: round2(order.paymentBreakdown?.online || 0),
+          CREDIT: order.status === 'voided' ? 0 : round2(order.paymentBreakdown?.credit || 0),
+        };
+        const earlier = await RefundTransaction.find({ order: order._id }).session(session);
+        const refunded = { CASH: 0, UPI: 0, CARD: 0, ONLINE: 0, CREDIT: 0 };
+        for (const item of earlier) {
+          const key = item.method === 'MIXED' ? 'CASH' : item.method;
+          refunded[key] = round2((refunded[key] || 0) + item.amount);
+        }
+        const left = (m) => round2((paid[m] || 0) - (refunded[m] || 0));
+        const methods = Object.keys(paid).filter((m) => left(m) > 0);
+        if (methods.length === 0) throw new ApiError(409, 'Nothing is left to refund on this bill.');
+
+        const method = req.body.method || methods[0];
+        if (!paid[method] && paid[method] !== 0) throw new ApiError(400, 'Invalid refund method.');
+        if (left(method) <= 0) throw new ApiError(400, `This bill has nothing left to refund by ${method}.`);
+
+        const amount = round2(Number(req.body.amount ?? left(method)));
+        if (!Number.isFinite(amount) || amount <= 0) throw new ApiError(400, 'Enter a valid refund amount.');
+        if (amount > left(method)) throw new ApiError(400, `Only Rs ${left(method)} can be refunded by ${method}.`);
+        if (method === 'UPI' && !String(req.body.reference || '').trim()) throw new ApiError(400, 'UPI refund reference is required.');
+
+        const [refund] = await RefundTransaction.create([{ order: order._id, amount, method, reference: req.body.reference, processedBy: req.user._id, note: reason }], { session });
+
+        if (method === 'CREDIT' && order.customer) {
+          const customer = await Customer.findById(order.customer).session(session);
+          if (customer) {
+            customer.outstandingBalance = round2(Math.max(0, customer.outstandingBalance - amount));
+            await customer.save({ session });
+            await CreditTransaction.create([{ customer: customer._id, type: 'PAID', amount, method: 'REFUND', order: order._id, balanceAfter: customer.outstandingBalance, note: `Refund on bill #${order.orderNumber}: ${reason}`, recordedBy: req.user._id }], { session });
+          }
+        }
+
+        order.refundedAmount = round2((order.refundedAmount || 0) + amount);
+        const total = Object.values(paid).reduce((s, v) => s + v, 0);
+        order.refundStatus = order.refundedAmount >= round2(total) ? 'refunded' : 'partial';
+        order.refundedAt = refund.processedAt;
+        order.refundReference = refund.reference;
+        await order.save({ session });
+        result = { order, refund };
+      });
+      return result;
+    } finally {
+      await session.endSession();
+    }
+  };
+
+  let result;
+  try {
+    result = await record();
+  } catch (err) {
+    // Databases from before partial refunds allow one refund per bill.
+    if (err.code !== 11000 || !err.keyPattern?.order) throw err;
+    await RefundTransaction.collection.dropIndex('order_1');
+    result = await record();
+  }
+  await audit(req, 'ORDER_REFUNDED', result.order, { amount: result.refund.amount, method: result.refund.method, reason, reference: result.refund.reference });
+  res.status(201).json({ success: true, data: result });
 });
 
 // POST /api/orders/:id/void

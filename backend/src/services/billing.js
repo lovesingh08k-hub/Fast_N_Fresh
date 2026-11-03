@@ -120,10 +120,10 @@ function computeBill({ lines, settings, orderType = 'takeaway', adjust = {} }) {
     .filter((row) => row.rate > 0 && row.tax > 0)
     .sort((a, b) => a.rate - b.rate)
     .map((row) => {
+      if (igst) return { rate: row.rate, taxable: row.taxable, cgst: 0, sgst: 0, igst: row.tax, tax: row.tax };
+      // CGST and SGST are the same amount, so the total is twice the half.
       const half = round2(row.tax / 2);
-      return igst
-        ? { rate: row.rate, taxable: row.taxable, cgst: 0, sgst: 0, igst: row.tax, tax: row.tax }
-        : { rate: row.rate, taxable: row.taxable, cgst: half, sgst: round2(row.tax - half), igst: 0, tax: row.tax };
+      return { rate: row.rate, taxable: row.taxable, cgst: half, sgst: half, igst: 0, tax: round2(half * 2) };
     });
   const tax = round2(taxes.reduce((s, t) => s + t.tax, 0));
   const taxableAmount = round2([...byRate.values()].reduce((s, r) => s + r.taxable, 0));

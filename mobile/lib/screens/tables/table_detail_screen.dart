@@ -63,8 +63,8 @@ class _TableDetailScreenState extends State<TableDetailScreen> with WidgetsBindi
     _load();
     // Keep the table screen live so order updates appear here without
     // forcing the staff to leave the table and open another page.
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted && !_loading && _busyOrders.isEmpty) _refreshSilently();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted && !_loading && _busyOrders.isEmpty && ModalRoute.of(context)?.isCurrent == true) _refreshSilently();
     });
   }
 

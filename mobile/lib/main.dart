@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'core/network/dio_client.dart';
+import 'core/offline/offline_engine.dart';
 import 'core/network/network_status.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
@@ -50,6 +51,8 @@ void main() async {
   // below) instead of delaying startup.
   await themeProvider.load();
 
+  await OfflineEngine.instance.init(DioClient.instance.dio);
+
   DioClient.instance.onUnauthorized = authProvider.forceLogout;
   DioClient.instance.onLicenceInactive = (message) {
     // Close every open page so the blocked screen (shown at the root) is
@@ -68,6 +71,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (_) => TabRefreshBus()),
         ChangeNotifierProvider.value(value: NetworkStatus.instance),
+        ChangeNotifierProvider.value(value: OfflineEngine.instance),
       ],
       child: const _AppBootstrapper(),
     ),

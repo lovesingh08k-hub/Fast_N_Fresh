@@ -6,21 +6,32 @@ function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-function summarize(orders) {
-  const sales = orders.reduce((sum, o) => sum + o.grandTotal, 0);
-  const cash = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.cash || 0), 0);
-  const upi = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.upi || 0), 0);
-  const credit = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.credit || 0), 0);
-  const card = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.card || 0), 0);
-  const online = orders.reduce((sum, o) => sum + (o.paymentBreakdown?.online || 0), 0);
+// The database adds these up, so the cost does not grow with the bills:
+// the dashboard is refreshed all day on every device.
+async function summarize(filter) {
+  const [row] = await Order.aggregate([
+    { $match: filter },
+    {
+      $group: {
+        _id: null,
+        sales: { $sum: '$grandTotal' },
+        orders: { $sum: 1 },
+        cash: { $sum: { $ifNull: ['$paymentBreakdown.cash', 0] } },
+        upi: { $sum: { $ifNull: ['$paymentBreakdown.upi', 0] } },
+        credit: { $sum: { $ifNull: ['$paymentBreakdown.credit', 0] } },
+        card: { $sum: { $ifNull: ['$paymentBreakdown.card', 0] } },
+        online: { $sum: { $ifNull: ['$paymentBreakdown.online', 0] } },
+      },
+    },
+  ]);
   return {
-    sales: round2(sales),
-    orders: orders.length,
-    cash: round2(cash),
-    upi: round2(upi),
-    credit: round2(credit),
-    card: round2(card),
-    online: round2(online),
+    sales: round2(row?.sales || 0),
+    orders: row?.orders || 0,
+    cash: round2(row?.cash || 0),
+    upi: round2(row?.upi || 0),
+    credit: round2(row?.credit || 0),
+    card: round2(row?.card || 0),
+    online: round2(row?.online || 0),
   };
 }
 
@@ -66,8 +77,8 @@ const getDashboard = asyncHandler(async (req, res) => {
     ];
   }
 
-  const [todaysOrders, placedTodayCount, lowStockCount, outstandingAgg, recentOrders, topProductsAgg] = await Promise.all([
-    Order.find({ ...baseFilter, createdAt: { $gte: todayStart, $lte: todayEnd } }),
+  const [today, placedTodayCount, lowStockCount, outstandingAgg, recentOrders, topProductsAgg] = await Promise.all([
+    summarize({ ...baseFilter, createdAt: { $gte: todayStart, $lte: todayEnd } }),
     Order.countDocuments(placedTodayFilter),
     Product.countDocuments({ isDeleted: false, trackInventory: true, $expr: { $lte: ['$stock', '$lowStockThreshold'] } }),
     Customer.aggregate([
@@ -75,7 +86,7 @@ const getDashboard = asyncHandler(async (req, res) => {
       { $group: { _id: null, total: { $sum: '$outstandingBalance' }, count: { $sum: 1 } } },
     ]),
     Order.find(recentOrdersFilter)
-      .populate('customer', 'name')
+      .select('orderNumber items.name items.quantity grandTotal paymentMethod status orderSource table createdAt')
       .populate('table', 'name number')
       .sort({ createdAt: -1 })
       .limit(10),
@@ -88,7 +99,6 @@ const getDashboard = asyncHandler(async (req, res) => {
     ]),
   ]);
 
-  const today = summarize(todaysOrders);
   // Keep sales/payment totals based on completed bills, but expose the number
   // of all placed (non-voided) orders and operational alerts for the manager.
   today.orders = placedTodayCount;
@@ -134,11 +144,11 @@ const getSalesOverview = asyncHandler(async (req, res) => {
 
   const yesterday = daysAgo(1);
 
-  const [todayOrders, yesterdayOrders, weekOrders, monthOrders, graphData] = await Promise.all([
-    Order.find({ ...baseFilter, createdAt: { $gte: startOfDay(now), $lte: endOfDay(now) } }),
-    Order.find({ ...baseFilter, createdAt: { $gte: startOfDay(yesterday), $lte: endOfDay(yesterday) } }),
-    Order.find({ ...baseFilter, createdAt: { $gte: startOfWeek(now) } }),
-    Order.find({ ...baseFilter, createdAt: { $gte: startOfMonth(now) } }),
+  const [today, yesterdayTotals, thisWeek, thisMonth, graphData] = await Promise.all([
+    summarize({ ...baseFilter, createdAt: { $gte: startOfDay(now), $lte: endOfDay(now) } }),
+    summarize({ ...baseFilter, createdAt: { $gte: startOfDay(yesterday), $lte: endOfDay(yesterday) } }),
+    summarize({ ...baseFilter, createdAt: { $gte: startOfWeek(now) } }),
+    summarize({ ...baseFilter, createdAt: { $gte: startOfMonth(now) } }),
     Order.aggregate([
       { $match: { ...baseFilter, createdAt: { $gte: startOfDay(daysAgo(13)) } } },
       {
@@ -155,10 +165,10 @@ const getSalesOverview = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: {
-      today: summarize(todayOrders),
-      yesterday: summarize(yesterdayOrders),
-      thisWeek: summarize(weekOrders),
-      thisMonth: summarize(monthOrders),
+      today,
+      yesterday: yesterdayTotals,
+      thisWeek,
+      thisMonth,
       last14Days: graphData.map((d) => ({ date: d._id, sales: round2(d.sales), orders: d.orders })),
     },
   });

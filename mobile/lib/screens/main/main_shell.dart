@@ -174,7 +174,9 @@ class _MainShellState extends State<MainShell> {
           Expanded(
             child: IndexedStack(
               index: _index,
-              children: _pages,
+              children: [
+                for (var i = 0; i < _pages.length; i++) TickerMode(enabled: i == _index, child: _pages[i]),
+              ],
             ),
           ),
         ],

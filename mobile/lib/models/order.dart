@@ -131,6 +131,14 @@ class Order {
   /// GST invoice number per outlet and financial year (paid bills).
   final String? invoiceNumber;
 
+  /// Made without internet and not on the server yet; [invoiceNumber] is then
+  /// a temporary number (OFF-...) and the server gives the final one.
+  final bool isOfflinePending;
+
+  /// Refunded so far, and 'not_required', 'partial' or 'refunded'.
+  final double refundedAmount;
+  final String refundStatus;
+
   /// Full calculation: discount, charges, GST per rate, round-off.
   final BillBreakdown bill;
   final String? onlinePlatform; // Swiggy / Zomato for ONLINE bills
@@ -177,6 +185,9 @@ class Order {
     this.deliveryInfo,
     required this.paymentMethod,
     this.invoiceNumber,
+    this.isOfflinePending = false,
+    this.refundedAmount = 0,
+    this.refundStatus = 'not_required',
     this.bill = const BillBreakdown(),
     this.onlinePlatform,
     this.onlineOrderRef,
@@ -227,6 +238,9 @@ class Order {
       deliveryInfo: json['deliveryInfo'] != null ? DeliveryInfo.fromJson(json['deliveryInfo'] as Map<String, dynamic>?) : null,
       paymentMethod: json['paymentMethod'] as String? ?? 'CASH',
       invoiceNumber: json['invoiceNumber'] as String?,
+      isOfflinePending: (json['_id'] as String).startsWith('local-'),
+      refundedAmount: (json['refundedAmount'] as num?)?.toDouble() ?? 0,
+      refundStatus: json['refundStatus'] as String? ?? 'not_required',
       bill: BillBreakdown.fromJson(json),
       onlinePlatform: json['onlinePlatform'] as String?,
       onlineOrderRef: json['onlineOrderRef'] as String?,

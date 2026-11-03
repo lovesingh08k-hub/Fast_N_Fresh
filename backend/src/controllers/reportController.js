@@ -19,7 +19,12 @@ function parseRange(query) {
 // GET /api/reports/sales?from=&to=
 const getSalesReport = asyncHandler(async (req, res) => {
   const filter = parseRange(req.query);
-  const orders = await Order.find(filter);
+  const orders = await Order.find(filter)
+    .select('grandTotal paymentBreakdown discount tax serviceCharge complimentary paymentMethod subtotal orderType')
+    .lean();
+  const refundFilter = filter.createdAt ? { processedAt: filter.createdAt } : {};
+  const refundRows = await RefundTransaction.find(refundFilter).select('amount').lean();
+  const refunds = round2(refundRows.reduce((s, r) => s + (r.amount || 0), 0));
 
   const totalSales = orders.reduce((s, o) => s + o.grandTotal, 0);
   const cash = orders.reduce((s, o) => s + (o.paymentBreakdown?.cash || 0), 0);
@@ -44,6 +49,8 @@ const getSalesReport = asyncHandler(async (req, res) => {
     success: true,
     data: {
       totalSales: round2(totalSales),
+      refunds,
+      netSales: round2(totalSales - refunds),
       numberOfOrders: orders.length,
       averageOrderValue: orders.length ? round2(totalSales / orders.length) : 0,
       cash: round2(cash),

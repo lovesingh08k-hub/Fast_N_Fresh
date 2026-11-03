@@ -68,6 +68,11 @@ const orderSchema = new mongoose.Schema(
     // Sparse so it never applies to legacy/undefined values.
     clientRequestId: { type: String, index: { unique: true, sparse: true } },
 
+    // Made on a device without internet and sent later. offlineRef is the
+    // number printed on the customer's receipt at the time.
+    offline: { type: Boolean, default: false },
+    offlineRef: { type: String, trim: true, index: { sparse: true } },
+
     items: { type: [orderItemSchema], required: true, default: [] },
 
     // Order type: which channel this order came through.
@@ -168,7 +173,7 @@ const orderSchema = new mongoose.Schema(
     // see (and, if needed, clean up/cancel) UPI orders where the customer
     // opened a UPI app but never returned to submit a reference.
     paymentInitiatedAt: { type: Date },
-    refundStatus: { type: String, enum: ['not_required', 'pending', 'refunded'], default: 'not_required', index: true },
+    refundStatus: { type: String, enum: ['not_required', 'pending', 'partial', 'refunded'], default: 'not_required', index: true },
     refundedAmount: { type: Number, default: 0, min: 0 },
     refundedAt: { type: Date },
     refundReference: { type: String, trim: true },
@@ -185,7 +190,7 @@ const orderSchema = new mongoose.Schema(
       online: { type: Number, default: 0 },
       credit: { type: Number, default: 0 },
     },
-    upiReference: { type: String, trim: true },
+    upiReference: { type: String, trim: true, index: { sparse: true } },
     amountReceived: { type: Number }, // for cash, amount tendered
     changeReturned: { type: Number, default: 0 },
 
@@ -227,6 +232,7 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index({ createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ staff: 1, createdAt: -1 });
 orderSchema.index({ customer: 1, createdAt: -1 });
 orderSchema.index({ paymentMethod: 1 });

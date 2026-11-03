@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../core/network/dio_client.dart';
+import '../core/offline/offline_engine.dart';
 import '../core/network/token_storage.dart';
 import '../core/network/api_exception.dart';
 import '../models/business_session.dart';
@@ -44,6 +45,7 @@ class AuthProvider extends ChangeNotifier {
   void _applySession(BusinessSession? value) {
     session = value;
     DioClient.instance.outletCode = value?.currentOutletCode;
+    OfflineEngine.instance.setScope('${value?.code ?? 'cafe'}_${value?.currentOutletCode ?? 'main'}');
   }
 
   Future<void> _saveSession() async {
@@ -57,6 +59,7 @@ class AuthProvider extends ChangeNotifier {
     final value = session;
     if (value == null || value.currentOutletCode == outletCode) return;
     _applySession(value.withOutlet(outletCode));
+    unawaited(OfflineEngine.instance.refreshCaches());
     await _saveSession();
     notifyListeners();
   }
@@ -153,6 +156,7 @@ class AuthProvider extends ChangeNotifier {
 
       // Verify the JWT against the current backend session.
       await _validateServerSession();
+      unawaited(OfflineEngine.instance.refreshCaches());
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
         await _performLogout();
@@ -228,6 +232,7 @@ class AuthProvider extends ChangeNotifier {
         jsonEncode(user.toJson()),
       );
       _applySession(newSession);
+      unawaited(OfflineEngine.instance.refreshCaches());
       await _saveSession();
 
       currentUser = user;

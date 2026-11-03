@@ -1,4 +1,5 @@
 const express = require('express');
+const { syncOfflineOrder } = require('../controllers/offlineController');
 const {
   createOrder,
   createKot,
@@ -26,6 +27,7 @@ const router = express.Router();
 router.use(protect);
 
 router.post('/', createOrder);
+router.post('/offline-sync', syncOfflineOrder); // a bill made without internet, sent when back online
 router.post('/quote', quoteOrder); // bill preview (GST, charges, round-off); saves nothing
 router.post('/open', startOpenOrder); // admin/manager/staff can create bills (takeaway/delivery/quick dine-in)
 router.get('/', listOrders); // staff see only their own (enforced in controller)

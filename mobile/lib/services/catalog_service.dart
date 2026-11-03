@@ -5,6 +5,8 @@ import '../models/product.dart';
 import '../models/category.dart';
 
 class ProductService {
+  static const _pageSize = 200;
+
   final Dio _dio = DioClient.instance.dio;
 
   Future<List<Product>> list({String? search, String? categoryId, String? status, bool lowStock = false}) async {
@@ -13,25 +15,30 @@ class ProductService {
       if (categoryId != null) 'category': categoryId,
       if (status != null) 'status': status,
       if (lowStock) 'lowStock': 'true',
-      'limit': 200,
+      'limit': _pageSize,
     };
 
-    Response res;
+    // The server gives at most [_pageSize] at a time; a big menu has more.
+    final data = <dynamic>[];
     try {
-      posLog('Request URL: ${_dio.options.baseUrl}/products | params: $queryParameters');
-      res = await _dio.get('/products', queryParameters: queryParameters);
-      posLog('Response status: ${res.statusCode}');
+      for (var page = 1;; page++) {
+        final res = await _dio.get('/products', queryParameters: {...queryParameters, if (page > 1) 'page': page});
+        final raw = res.data;
+        final rows = raw is Map ? raw['data'] : null;
+        if (rows is! List) {
+          throw const FormatException('Invalid products response: data is not a list');
+        }
+        data.addAll(rows);
+        if (rows.length < _pageSize) break;
+      }
+    } on FormatException {
+      rethrow;
     } catch (e) {
       posLog('Products request FAILED: $e');
       throw DioClient.instance.mapError(e);
     }
 
     try {
-      final raw = res.data;
-      final data = raw is Map ? raw['data'] : null;
-      if (data is! List) {
-        throw const FormatException('Invalid products response: data is not a list');
-      }
       posLog('Raw product count: ${data.length}');
 
       // Parse defensively: one malformed product must not blank the complete
